@@ -30,8 +30,8 @@ if (interactive()) {
   line_args <- c(
     "busco_summaries/stramenopiles_odb12.2",
     # "busco_summaries/eukaryota_odb12.2",
-    "genomes_metadata.tsv",
-    "./"
+    "s-latissima-genome-v2/genomes_metadata.tsv",
+    "s-latissima-genome-v2/"
   )
 } else if (length(commandArgs(trailingOnly = T)) == 3) {
   line_args <- commandArgs(trailingOnly = T)

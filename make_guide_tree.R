@@ -21,7 +21,7 @@ if (interactive()) {
   # Set working dir
   wd <- "/project2/noujdine_61/kdeweese/latissima/corteva_genome"
   setwd(wd)
-  seq_file <- "s_latissima_prog_align.txt"
+  seq_file <- "s-latissima-genome-v2/s_latissima_prog_align.txt"
   lineage <- "stramenopiles_odb12.2"
   outdir <- "s-latissima-genome-v2/"
 } else {

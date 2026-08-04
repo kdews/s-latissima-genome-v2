@@ -37,7 +37,7 @@ Requires:
  - virtualenv (https://virtualenv.pypa.io/en/latest)
  - Toil (https://toil.readthedocs.io/en/latest)
  - Cactus (https://github.com/ComparativeGenomicsToolkit/cactus)
-   contains HALtools distribution (http://github.com/glennhickey/hal)"
+   - contains HALtools distribution (http://github.com/glennhickey/hal)"
   exit 0
 fi
 

@@ -99,20 +99,21 @@ if (interactive()) {
   paf_file <- "cactus_pangenome_01-28-26_6039802/synteny_PAFs/merged_synteny.paf"
   ref <- "corteva_v2" # the --reference assembly prefix (as it appears in PAF tname)
   query <- "roscoff_v2" # second assembly name (as in PAF qname)
-  seqFile <- "s_latissima_align.txt" # Cactus seqFile
+  seqFile <- "s-latissima-genome-v2/s_latissima_align.txt" # Cactus seqFile
+  outdir <- "s-latissima-genome-v2/figures/pangenome_plots" # figure output dir
 } else {
   line_args <- commandArgs(trailingOnly = T)
   paf_file <- line_args[1]
   ref <- line_args[2]
   query <- line_args[3]
   seqFile <- line_args[4]
+  outdir <- line_args[5]
 }
 
-# Outputs
-outdir <- "pangenome_plots"
+# Create output directories
 chrom_dir <- file.path(outdir, "per_chromosome")
-dir.create(outdir, showWarnings = F)
-dir.create(chrom_dir, showWarnings = F)
+dir.create(outdir)
+dir.create(chrom_dir)
 
 # Import Cactus seqFile as table
 cactus_tab <- read_tsv(seqFile, col_names = c("Label", "Assembly"))
@@ -171,7 +172,7 @@ if (interactive()) {
   print(p_cov_panel)
 } else {
   showtext_opts(dpi = 300)
-  ggsave(file.path(outdir, "coverage_summary.png"),
+  ggsave(file.path(plots_dir, "coverage_summary.png"),
          p_cov_panel, width = 14, height = 12)
   showtext_opts(dpi = 100)
   message("Saved: coverage_summary.png", "\n")
@@ -276,9 +277,9 @@ if(interactive()) {
   print(p_dot_raw)
 } else {
   showtext_opts(dpi = 300)
-  ggsave(file.path(outdir, "chr_whole_genome_dotplot.png"),
+  ggsave(file.path(plots_dir, "chr_whole_genome_dotplot.png"),
          p_dot, width = 14, height = 10)
-  ggsave(file.path(outdir, "whole_genome_dotplot.png"),
+  ggsave(file.path(plots_dir, "whole_genome_dotplot.png"),
          p_dot_raw, width = 14, height = 10)
   showtext_opts(dpi = 100)
   message("Saved: chr_whole_genome_dotplot.png and whole_genome_dotplot.png", "\n")
@@ -495,12 +496,12 @@ if (interactive()) {
   print(p_ribbon)
 } else {
   showtext_opts(dpi = 300)
-  ggsave(file.path(outdir, "whole_genome_ribbon.png"),
+  ggsave(file.path(plots_dir, "whole_genome_ribbon.png"),
          p_ribbon, width = 7, height = 5)
   showtext_opts(dpi = 100)
   message(
     "Saved whole-genome ribbon plot to: ",
-    outdir, "whole_genome_ribbon.png", "\n"
+    plots_dir, "whole_genome_ribbon.png", "\n"
   )
 }
 
@@ -519,20 +520,20 @@ if(interactive()) {
 } else {
   write.table(
     sum_df,
-    file.path(outdir, "alignment_summary.tsv"),
+    file.path(plots_dir, "alignment_summary.tsv"),
     sep = "\t", quote = F, row.names = F
   )
   write.table(
     chr_sum_df,
-    file.path(outdir, "chr_alignment_summary.tsv"),
+    file.path(plots_dir, "chr_alignment_summary.tsv"),
     sep = "\t", quote = F, row.names = F
   )
   message(
     "Wrote summary tables: ",
-    file.path(outdir, "alignment_summary.tsv"),
-    file.path(outdir, "chr_alignment_summary.tsv"),
+    file.path(plots_dir, "alignment_summary.tsv"),
+    file.path(plots_dir, "chr_alignment_summary.tsv"),
     "\n"
   )
-  message("Outputs in: ", outdir, "\n")
+  message("Outputs in: ", plots_dir, "\n")
 }
 
