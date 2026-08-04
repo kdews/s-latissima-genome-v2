@@ -1,0 +1,77 @@
+#!/bin/bash
+#SBATCH -J pangenome_plots
+#SBATCH -o %x_logs/%x_%j.log
+#SBATCH -p main
+#SBATCH --mem=5g
+#SBATCH --time=05:00:00
+
+# Script variables
+# Extract job name from script
+if [[ -z "${SLURM_JOB_NAME}" ]]
+then
+  job_name="$(basename "$0")"
+  job_name="${job_name%%.*}"
+else
+  job_name="$SLURM_JOB_NAME"
+fi
+outdir="$job_name" # output directory
+rscript="$job_name.R" # R script
+# Scripts directory
+scripts_dir="s-latissima-genome-v2/"
+[[ -d "$scripts_dir" ]] && rscript="${scripts_dir}${rscript}"
+
+# Help message
+if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]
+then
+  echo "\
+Generates alignment summary tables and plots, whole-genome andpairwise dotplots,
+and a whole genome ribbon plot.
+
+Usage: sbatch $job_name.sbatch
+
+Output:
+  $outdir/
+  ├── alignment_summary.tsv                 # alignment summary table
+  ├── chr_alignment_summary.tsv             # alignment summary table (chr only)
+  ├── chr_whole_genome_dotplot.png          # dotplot of chromosomes only
+  ├── coverage_summary.png                  # coverage summary plots
+  ├── per_chromosome
+  │   ├── chr_<seqid>.png                   # chromosome dotplots
+  │   └── <sedid>.png                       # contig dotplots
+  ├── whole_genome_dotplot.png              # whole genome dotplot
+  └── whole_genome_ribbon.png               # whole genome ribbon plot
+
+Requires: R (https://www.r-project.org/)"
+  exit 0
+fi
+
+# Print date and time
+date_fmt="%-I:%M:%S %p (%a %d %b %Y)" # date format
+date +"$date_fmt"
+echo
+
+# Input
+# Merged PAF file
+paf_file="cactus_pangenome_01-28-26_6039802/synteny_PAFs/merged_synteny.paf"
+# The --reference assembly prefix (as it appears in PAF tname)
+ref="corteva_v2"
+# The second assembly name (as in PAF qname)
+query="roscoff_v2"
+
+# Load R modules
+module purge
+module load ver/2506 gcc/14.3.0 r/4.5.2
+cmd=(
+  Rscript
+  "$rscript"
+  "$paf_file"
+  "$ref"
+  "$query"
+)
+echo "${cmd[*]}"
+"${cmd[@]}"
+
+# Print date and time
+date_fmt="%-I:%M:%S %p (%a %d %b %Y)" # date format
+date +"$date_fmt"
+echo
