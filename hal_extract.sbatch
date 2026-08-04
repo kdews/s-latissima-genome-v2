@@ -23,7 +23,7 @@ then
   echo "\
 Extracts individual and merged PAF files from chromosome alignments.
 Requires output directory from cactus-pangenome (cactusDir) as input.
-Usage: sbatch hal_extract.sbatch <cactusDir> <reference> <query>
+Usage: sbatch $job_name.sbatch <cactusDir> <reference> <query>
 
 Required input:
   cactusDir         path to directory containing output of cactus-pangenome
@@ -36,7 +36,8 @@ Output:
 Requires:
  - virtualenv (https://virtualenv.pypa.io/en/latest)
  - Toil (https://toil.readthedocs.io/en/latest)
- - Cactus (https://github.com/ComparativeGenomicsToolkit/cactus)"
+ - Cactus (https://github.com/ComparativeGenomicsToolkit/cactus)
+   contains HALtools distribution (http://github.com/glennhickey/hal)"
   exit 0
 fi
 

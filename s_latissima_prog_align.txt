@@ -1,0 +1,5 @@
+(((roscoff_v2:0.02831744134,corteva_v2:0.009014567198):0.008959490563,japonica_li2025:0.04478360668):0,ectocarpus_liu2024:0.2333185702);
+corteva_v2	assemblies/Slattisima_v0.2_Genome_Polished_111925.fasta
+roscoff_v2	assemblies/S-latissima_SLPER63f_v2.0.fa
+japonica_li2025	assemblies/Saccharina_japonica.fix.fa
+ectocarpus_liu2024	assemblies/Ec32_V5.reference.fasta

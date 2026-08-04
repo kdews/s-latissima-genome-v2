@@ -1,0 +1,3 @@
+corteva_v2_polished	assemblies/Genome_Polished_013026_Illumina_Polished.fasta
+roscoff_v2	assemblies/S-latissima_SLPER63f_v2.0.fa
+japonica_li2025	assemblies/Saccharina_japonica.fix.fa

@@ -1,0 +1,2 @@
+corteva_v2	assemblies/Slattisima_v0.2_Genome_Polished_111925.fasta
+roscoff_v2	assemblies/S-latissima_SLPER63f_v2.0.fa

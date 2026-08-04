@@ -1,0 +1,11 @@
+# Label	Assembly
+# lindell_v0	assemblies/SugarkelpHifiasm.raconPolished.fasta
+# lindell_v1	assemblies/SlaSLCT1FG3_1_AssemblyScaffolds_Repeatmasked.fasta
+# corteva_v1	assemblies/Draft_ONT_TelomereContigs_Saccharina.fasta
+# corteva_v2	assemblies/Slattisima_v0.2_Genome_Polished_111925.fasta
+# corteva_v2_polished	assemblies/Genome_Polished_013026_Illumina_Polished.fasta
+# roscoff_v1	assemblies/Saccharina-latissima_FEMALE.fa
+# roscoff_v2	assemblies/S-latissima_SLPER63f_v2.0.fa
+# ilvo	assemblies/GCA_034768055.1_ILVO_Slat_1.0_genomic.fna
+# japonica_li2025	assemblies/Saccharina_japonica.fix.fa
+ectocarpus_liu2024	assemblies/Ec32_V5.reference.fasta
