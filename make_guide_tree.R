@@ -23,7 +23,7 @@ if (interactive()) {
   setwd(wd)
   seq_file <- "s-latissima-genome-v2/s_latissima_prog_align.txt"
   lineage <- "stramenopiles_odb12.2"
-  outdir <- "s-latissima-genome-v2/"
+  outdir <- "s-latissima-genome-v2"
 } else {
   line_args <- commandArgs(trailingOnly = T)
   cat("Arguments:", "\n")
@@ -50,9 +50,11 @@ ml_nwk_file <- paste(outname, ml_nwk_file, sep = "-")
 trees_plot_file <- paste(outname, trees_plot_file, sep = "-")
 msa_plot_file <- paste(outname, msa_plot_file, sep = "-")
 if (dir.exists(outdir)) {
-  og_dist_file <- paste(outdir, og_dist_file, sep = "/")
-  trees_plot_file <- paste(outdir, trees_plot_file, sep = "/")
-  msa_plot_file <- paste(outdir, msa_plot_file, sep = "/")
+  nj_nwk_file <- file.path(outdir, nj_nwk_file)
+  ml_nwk_file <- file.path(outdir, ml_nwk_file)
+  og_dist_file <- file.path(outdir, "figures", og_dist_file)
+  trees_plot_file <- file.path(outdir, "figures", trees_plot_file)
+  msa_plot_file <- file.path(outdir,  "figures", msa_plot_file)
 }
 
 # Multithreading cores

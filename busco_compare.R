@@ -31,7 +31,7 @@ if (interactive()) {
     "busco_summaries/stramenopiles_odb12.2",
     # "busco_summaries/eukaryota_odb12.2",
     "s-latissima-genome-v2/genomes_metadata.tsv",
-    "s-latissima-genome-v2/"
+    "s-latissima-genome-v2"
   )
 } else if (length(commandArgs(trailingOnly = T)) == 3) {
   line_args <- commandArgs(trailingOnly = T)
@@ -40,7 +40,7 @@ if (interactive()) {
 }
 wd <- line_args[1]
 in_tsv <- line_args[2]
-outdir <- line_args[3]
+scripts_dir <- line_args[3]
 quast_script <- "quast.R"
 # Split lineage from working directory
 lineage <- unlist(strsplit(wd, "/"))[2]
@@ -71,9 +71,9 @@ rg_order <- c("US", "France", "Norway", "Other")
 ## Output
 busc_plot_file <- paste0("busco_", lineage, ".png")
 # Prepend output directory to script and plot filenames (if it exists)
-if (dir.exists(outdir)) {
-  quast_script <- paste(outdir, quast_script, sep = "/")
-  busc_plot_file <- paste0(outdir, busc_plot_file)
+if (dir.exists(scripts_dir)) {
+  quast_script <- file.path(scripts_dir, quast_script)
+  busc_plot_file <- file.path(scripts_dir, "figures", busc_plot_file)
 }
 
 ## Functions

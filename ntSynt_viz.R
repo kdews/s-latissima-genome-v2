@@ -1,4 +1,5 @@
-# Edit of https://github.com/BirolLab/ntSynt-viz/blob/main/bin/ntsynt_viz_plot_synteny_blocks_ribbon_plot.R
+# Edit of:
+# https://github.com/BirolLab/ntSynt-viz/blob/main/bin/ntsynt_viz_plot_synteny_blocks_ribbon_plot.R
 suppressPackageStartupMessages({
   library(ape)
   library(argparse)
@@ -15,34 +16,53 @@ suppressPackageStartupMessages({
 # Generates ntSynt synteny ribbon plots using gggenomes
 
 # Parse the input arguments
-parser <- ArgumentParser(description = "Plot the ntSynt synteny blocks ribbon plot using gggenomes")
-parser$add_argument("-s", "--sequences", help = "Input sequence lengths TSV", required = TRUE)
-parser$add_argument("-l", "--links", help = "Synteny block links", required = TRUE)
-parser$add_argument("-c", "--painting", help = "File with chromosome painting information", required = FALSE)
-parser$add_argument("--centromeres", help = "File with centromere positions", required = FALSE, default = NULL)
-parser$add_argument("--scale", help = "Length of scale bar in bases (default 1 Gbp)", default = 1e9,
-                    required = FALSE, type = "double")
-parser$add_argument("--width", help = "Width of plot in cm (default 50)", default = 50,
-                    required = FALSE, type = "double")
-parser$add_argument("--height", help = "Height of plot in cm (default 20)", default = 20,
-                    required = FALSE, type = "double")
-parser$add_argument("--tree", help = "Newick-formatted cladogram", required = FALSE)
-parser$add_argument("--no-arrow", help = paste("Do not plot arrows indicating reverse complementation.",
-                                                "Only use when blocks were normalized."),
-                    action = "store_true", default = FALSE)
-parser$add_argument("--haplotypes", help = "TSV with haplotype nudges", required = FALSE)
-parser$add_argument("--colour_indices", help = "TSV with information about colour selection", required = TRUE)
+parser <- ArgumentParser(
+  description = "Plot the ntSynt synteny blocks ribbon plot using gggenomes"
+)
+parser$add_argument("-s", "--sequences", help = "Input sequence lengths TSV",
+                    required = T)
+parser$add_argument("-l", "--links", help = "Synteny block links", required = T)
+parser$add_argument("-c", "--painting",
+                    help = "File with chromosome painting information",
+                    required = F)
+parser$add_argument("--centromeres", help = "File with centromere positions",
+                    required = F, default = NULL)
+parser$add_argument("--scale",
+                    help = "Length of scale bar in bases (default 1 Gbp)",
+                    default = 1e9, required = F, type = "double")
+parser$add_argument("--width", help = "Width of plot in cm (default 50)",
+                    default = 50, required = F, type = "double")
+parser$add_argument("--height", help = "Height of plot in cm (default 20)",
+                    default = 20, required = F, type = "double")
+parser$add_argument("--tree", help = "Newick-formatted cladogram", required = F)
+parser$add_argument("--no-arrow",
+                    help = paste(
+                      "Do not plot arrows indicating reverse complementation.",
+                      "Only use when blocks were normalized."
+                    ), action = "store_true", default = F)
+parser$add_argument("--haplotypes", help = "TSV with haplotype nudges",
+                    required = F)
+parser$add_argument("--colour_indices",
+                    help = "TSV with information about colour selection",
+                    required = T)
 parser$add_argument("--ratio",
-                    help = paste("Ratio adjustment for labels on left side of the ribbon plot.",
-                                 "Increase if the labels are cut-off,",
-                                 "decrease to decrease space between ribbon plot and cladogram"),
-                    default = 0.1, required = FALSE, type = "double")
+                    help = paste(
+                      "Ratio adjustment for labels left side of ribbon plot.",
+                      "Increase if the labels are cut off,",
+                      "decrease to decrease space between ribbon plot & cladogram"
+                    ), default = 0.1, required = F, type = "double")
 parser$add_argument("-p", "--prefix",
-                    help = "Output prefix for PNG image (default synteny_gggenomes_plot)", required = FALSE,
+                    help =
+                      "Output prefix for PNG (default: synteny_gggenomes_plot)",
+                    required = F,
                     default = "synteny_gggenomes_plot")
-parser$add_argument("--format", help = "Output format for image (png or pdf)", required = FALSE,
-                    default = "png", choices = c("png", "pdf"))
-parser$add_argument("--order", help = "TSV file with desired order of tip labels (only used if --tree specified).", required = FALSE)
+parser$add_argument("--format", help = "Output format for image (png or pdf)",
+                    required = F, default = "png", choices = c("png", "pdf"))
+parser$add_argument("--order",
+                    help = paste(
+                      "TSV file with desired tip label order",
+                      "(only used if --tree specified)."
+                    ), required = F)
 
 if (interactive()) {
   seqFile_no_ext <- "s_latissima_align1"
@@ -69,7 +89,7 @@ args <- parser$parse_args(args)
 # args <- parser$parse_args()
 
 # Read in and prepare sequences
-sequences <- read.csv(args$sequences, sep = "\t", header = TRUE) %>%
+sequences <- read.csv(args$sequences, sep = "\t", header = T) %>%
   mutate(relative_orientation = if_else(relative_orientation == "+", "", "\u2190"))
 
 # Prepare name conversions for tree
@@ -118,7 +138,7 @@ sequences <- sequences %>%
 
 # Read in and prepare synteny links
 links_ntsynt <- read.csv(args$links,
-                         sep = "\t", header = TRUE) %>%
+                         sep = "\t", header = T) %>%
   mutate(bin_id = str_replace_all(bin_id, "_", " "),
          bin_id2 = str_replace_all(bin_id2, "_", " "))
 # Add numeric seqid rankings for each
@@ -126,7 +146,8 @@ links_ntsynt <- links_ntsynt %>%
   mutate(seq_rank = chr_num_key[seq_id], seq_rank2 = chr_num_key[seq_id2])
 links_ntsynt$seq_id <- factor(links_ntsynt$seq_id,
                               levels = input_chrom_order)
-links_ntsynt <- links_ntsynt %>% arrange(factor(seq_id, levels = input_chrom_order))
+links_ntsynt <- links_ntsynt %>%
+  arrange(factor(seq_id, levels = input_chrom_order))
 links_ntsynt$seq_id2 <- as.character(links_ntsynt$seq_id2)
 links_ntsynt$colour_block <- chr_num_key[links_ntsynt$colour_block]
 
@@ -148,7 +169,7 @@ if (scale %% 1e9 == 0) {
 }
 
 # Read in the data frame for chromosome painting features
-painting <- read.csv(args$painting, sep = "\t", header = TRUE) %>%
+painting <- read.csv(args$painting, sep = "\t", header = T) %>%
   mutate(bin_id = str_replace_all(bin_id, "_", " "))
 painting$colour_block <- chr_num_key[painting$colour_block]
 
@@ -163,15 +184,15 @@ painting <- painting %>%
   filter(as.numeric(colour_block) <= 31)
 
 # Read in the data frame with info about colours to choose for sequences
-colours_df <- read.csv(args$colour_indices, sep = "\t", header = TRUE)
+colours_df <- read.csv(args$colour_indices, sep = "\t", header = T)
 
 # Get the y coordinates for the features
-get_y_coord <- function(haplotypes, bin_id, y, end = FALSE) {
+get_y_coord <- function(haplotypes, bin_id, y, end = F) {
   if (typeof(haplotypes) == "logical") {
     return(y)
   } else {
     coordinates <- data.frame(bin_id = bin_id, y = y)
-    if (end == TRUE) {
+    if (end == T) {
       haplotypes <- haplotypes %>% 
         mutate(bin_id_next = lead(bin_id, 1), nudge_next = lead(nudge, 1)) %>%
         mutate(nudge_next = replace_na(nudge_next, 0))
@@ -188,7 +209,9 @@ get_y_coord <- function(haplotypes, bin_id, y, end = FALSE) {
 }
 
 # Make the ribbon plot - these layers can be fully customized as needed!
-make_plot <- function(links, sequences, painting, colours_df, add_scale_bar = FALSE, centromeres = FALSE, add_arrow = FALSE, haplotypes = FALSE) {
+make_plot <- function(links, sequences, painting, colours_df,
+                      add_scale_bar = F, centromeres = F,
+                      add_arrow = F, haplotypes = F) {
   target_genome <- (sequences %>% head(1) %>% select(bin_id))[[1]]
   sequences <- sequences %>%
   # Split sequence labels
@@ -196,28 +219,34 @@ make_plot <- function(links, sequences, painting, colours_df, add_scale_bar = FA
       seq_rank1 = case_when(bin_id == target_genome ~ seq_rank),
       seq_rank2 = case_when(bin_id != target_genome ~ seq_rank)
     )
-  sequences_filt <- unique((sequences %>% filter(bin_id == target_genome))$seq_rank)
+  sequences_filt <- unique((sequences %>%
+                              filter(bin_id == target_genome))$seq_rank)
   num_colours <- unique(colours_df$num_seqs)
   colours <- hue_pal()(num_colours)[colours_df$colour_index]
   
   if (is.data.frame(centromeres)) {
-    p <-  gggenomes(seqs = sequences, links = links, feats = list(painting, centromeres))
+    p <-  gggenomes(seqs = sequences, links = links,
+                    feats = list(painting, centromeres))
   } else {
     p <-  gggenomes(seqs = sequences, links = links, feats = list(painting))
   }
 
   plot <- p + theme_gggenomes_clean(base_size = 15) +
-  geom_link(aes(color = factor(colour_block, levels = levels(fai_lengths$seq_rank)),
-                fill = factor(colour_block, levels = levels(fai_lengths$seq_rank)),
+  geom_link(aes(color = factor(colour_block,
+                               levels = levels(fai_lengths$seq_rank)),
+                fill = factor(colour_block,
+                              levels = levels(fai_lengths$seq_rank)),
                 y = get_y_coord(haplotypes, .data$bin_id, .data$y),
-                yend = get_y_coord(haplotypes, .data$bin_id, .data$yend, end = TRUE)),
+                yend = get_y_coord(haplotypes, .data$bin_id, .data$yend,
+                                   end = T)),
             linewidth = 0.05, offset = 0, alpha = 0.5) +
   geom_seq(aes(y = get_y_coord(haplotypes, .data$bin_id, .data$y),
                yend = get_y_coord(haplotypes, bin_id, .data$y)),
                size = 2, colour = "darkgrey") + # draw contig/chromosome lines
   geom_feat(data = feats(painting),
             aes(
-              colour = factor(colour_block, levels = levels(fai_lengths$seq_rank)),
+              colour = factor(colour_block,
+                              levels = levels(fai_lengths$seq_rank)),
               y = get_y_coord(haplotypes, bin_id, .data$y),
               yend = get_y_coord(haplotypes, bin_id, .data$y)
             ),
@@ -226,7 +255,8 @@ make_plot <- function(links, sequences, painting, colours_df, add_scale_bar = FA
                     y = get_y_coord(haplotypes, bin_id, .data$y)),
                 size = 6, fontface = "italic") + # label each bin
   # Color target genome labels to match graph
-  geom_seq_label(aes(color = seq_rank, label = seq_rank1), vjust = -4, size = 4) +
+  geom_seq_label(aes(color = seq_rank, label = seq_rank1), vjust = -4,
+                 size = 4) +
   geom_seq_label(aes(label = seq_rank2), vjust = 1.1, size = 4) +
   theme(axis.text = element_text(size = 25, face = "italic"),
         legend.position = "bottom",
@@ -237,10 +267,11 @@ make_plot <- function(links, sequences, painting, colours_df, add_scale_bar = FA
   # guides(fill = guide_legend(title = "", nrow = 3),
   #        colour = guide_legend(title = "", nrow = 3))
   if (add_arrow) {
-    plot <- plot + geom_seq_label(aes(label = relative_orientation, 
-                                      x = pmax(.data$x, .data$xend),
-                                      y = get_y_coord(haplotypes, bin_id, .data$y)), nudge_y = -0.05, 
-                                  size = 3.25, hjust = 1) 
+    plot <- plot + 
+      geom_seq_label(aes(label = relative_orientation, 
+                         x = pmax(.data$x, .data$xend),
+                         y = get_y_coord(haplotypes, bin_id, .data$y)),
+                     nudge_y = -0.05, size = 3.25, hjust = 1) 
   }
   xmax <- ggplot_build(plot)$layout$panel_params[[1]]$x.range[[2]]
   plot <- plot + xlim(0 - xmax * args$ratio, NA)
@@ -251,35 +282,37 @@ make_plot <- function(links, sequences, painting, colours_df, add_scale_bar = FA
   }
 
   if (add_scale_bar) {
-    plot <- plot + geom_segment(data = scale_bar, aes(x = x, xend = xend, y = y, yend = yend),
-                                linewidth = 1.5) +
-      geom_text(data = scale_bar, aes(x = x + (xend / 2), y = y - 0.4, label = label), size = 5) +
+    plot <- plot +
+      geom_segment(data = scale_bar,
+                   aes(x = x, xend = xend, y = y, yend = yend),
+                   linewidth = 1.5) +
+      geom_text(data = scale_bar,
+                aes(x = x + (xend / 2), y = y - 0.4, label = label), size = 5) +
       theme(axis.line.x = element_blank(),
             axis.title.x = element_blank(),
             axis.text.x = element_blank(),
             axis.ticks.x = element_blank())
   }
-
   return(plot)
-
 }
 
 # Read in haplotypes, or set to FALSE
 if (! is.null(args$haplotypes)) {
-  haplotypes <- read.csv(args$haplotypes, sep = "\t", header = TRUE) %>% mutate(bin_id = str_replace_all(bin_id, "_", " "))
+  haplotypes <- read.csv(args$haplotypes, sep = "\t", header = T) %>%
+    mutate(bin_id = str_replace_all(bin_id, "_", " "))
 } else {
-  haplotypes <- FALSE
+  haplotypes <- F
 }
 
 if (! is.null(args$centromeres)) {
-  centromeres <- read.csv(args$centromeres, sep = "\t", header = TRUE)
+  centromeres <- read.csv(args$centromeres, sep = "\t", header = T)
 } else {
-  centromeres <- FALSE
+  centromeres <- F
 }
 
 # Make the ribbon plot
 synteny_plot <- make_plot(links_ntsynt, sequences, painting, colours_df,
-                          add_scale_bar = TRUE, centromeres = centromeres,
+                          add_scale_bar = T, centromeres = centromeres,
                           add_arrow = !args$no_arrow, haplotypes = haplotypes)
 
 if (is.null(args$tree)) {
@@ -291,7 +324,7 @@ if (is.null(args$tree)) {
   print(ntsynt_tree)
 
   if (!is.null(args$order)) {
-    orders <- read.csv(args$order, sep = "\t", header = FALSE)
+    orders <- read.csv(args$order, sep = "\t", header = F)
     colnames(orders) <- c("label")
     # reverse to ensure target genome is at the top
     desired_order <- rev(orders$label)
@@ -303,7 +336,7 @@ if (is.null(args$tree)) {
     tree_phylo <- as.phylo(ntsynt_tree)
     new_tree <- rotateConstr(tree_phylo, desired_order)
     new_tree <- rename_taxa(new_tree, name_conversions)
-    ntsynt_ggtree <- ggtree(new_tree, branch.length = "none", ladderize = FALSE)
+    ntsynt_ggtree <- ggtree(new_tree, branch.length = "none", ladderize = F)
 
     tip_order_plot <- ntsynt_ggtree$data[ntsynt_ggtree$data$isTip, ] %>%
       arrange(y) %>%
@@ -311,39 +344,44 @@ if (is.null(args$tree)) {
     if (! identical(tip_order_plot, str_replace_all(desired_order, "_", " "))) {
       print(tip_order_plot)
       print(str_replace_all(desired_order, "_", " "))
-      stop("Error: Tip order in the plot does not match the new tree after rotation.")
+      stop("Tip order in the plot does not match the new tree after rotation.")
     }
   } else {
     ntsynt_tree <- rename_taxa(ntsynt_tree, name_conversions)
     ntsynt_ggtree <- ggtree(ntsynt_tree, branch.length = "none")
   }
 
-  # Align the plots properly
+  # Align plots properly
   synteny_y_range <- ggplot_build(synteny_plot)$layout$panel_params[[1]]$y.range
 
   plots <- ggarrange(
-    ntsynt_ggtree + scale_y_continuous(limits = synteny_y_range, expand = c(0, 0)),
+    ntsynt_ggtree +
+      scale_y_continuous(limits = synteny_y_range, expand = c(0, 0)),
     (synteny_plot %>% pick_by_tree(ntsynt_ggtree)),
-    common.legend = TRUE, align = "hv",
-    widths = c(1, 10), legend = "bottom"
+    common.legend = T, align = "hv", widths = c(1, 10), legend = "bottom"
   )
 }
 
-any_rc <- length((sequences %>% filter(relative_orientation != ""))$relative_orientation) > 0
+any_rc <- length(
+  (sequences %>% filter(relative_orientation != ""))$relative_orientation
+) > 0
 if (any_rc && !args$no_arrow) {
-  note <- text_grob("sequences reverse complemented with --normalize indicated with arrows", size = 15)
+  note <- text_grob(
+    "sequences reverse complemented with --normalize indicated with arrows",
+    size = 15
+  )
   plots <- ggarrange(plots, note, ncol = 1, heights = c(10, 1))
 }
 
 # Save the ribbon plot
 if (args$format == "pdf") {
-  ggsave(paste(args$prefix, ".pdf", sep = ""), plots,
-         units = "cm", width = args$width, height = args$height, bg = "white")
-  cat(paste("Plot saved:", paste(args$prefix, ".pdf", sep = ""), "\n", sep = " "))
+  ggsave(paste0(args$prefix, ".pdf",), plots, units = "cm",
+         width = args$width, height = args$height, bg = "white")
+  cat(paste("Plot saved:", paste0(args$prefix, ".pdf"), "\n"))
 } else {
-  png(paste(args$prefix, ".png", sep = ""), units = "cm", width = args$width, height = args$height,
-      res = 300, bg = "white")
+  png(paste0(args$prefix, ".png"), units = "cm",
+      width = args$width, height = args$height, res = 300, bg = "white")
   print(plots)
   dev.off()
-  cat(paste("Plot saved:", paste(args$prefix, ".png", sep = ""), "\n", sep = " "))
+  cat(paste("Plot saved:", paste0(args$prefix, ".png"), "\n"))
 }

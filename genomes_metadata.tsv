@@ -7,5 +7,5 @@ corteva_v2_polished	Saccharina latissima (US v2 polished)	local	file	/project2/n
 roscoff_v1	Saccharina latissima (France v1)	remote	url_tar	https://phaeoexplorer.sb-roscoff.fr/download/Saccharina-latissima.tar.gz	Saccharina-latissima_FEMALE.fa	remote	sra	pacbio	ERR13438528
 roscoff_v2	Saccharina latissima (France v2)	remote	url_tar	https://phaeoexplorer.sb-roscoff.fr/download/Saccharina-latissima-v2.tar.gz	S-latissima_SLPER63f_v2.0.fa	remote	sra	pacbio	ERR13438528
 ilvo	Saccharina latissima (Norway; Bråtelund et al. 2024)	remote	ncbi	GCA_034768055.1		remote	sra	illumina	SRR26857257
-japonica_li2025	Saccharina japonica (Li et al. 2025)	remote	figshare	27569472		remote	sra	pacbio	SRR31210069
-ectocarpus_liu2024	Ectocarpus sp. (Liu et al. 2024)	remote	dataverse	10.17617/3.NQDSLW		remote	sra	nanopore	SRR28880056,SRR28831804
+japonica_li2025	Saccharina japonica (China; Li et al. 2025)	remote	figshare	27569472		remote	sra	pacbio	SRR31210069
+ectocarpus_liu2024	Ectocarpus sp. (Peru; Liu et al. 2024)	remote	dataverse	10.17617/3.NQDSLW		remote	sra	nanopore	SRR28880056,SRR28831804

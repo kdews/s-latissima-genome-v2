@@ -15,8 +15,8 @@ else
   job_name="$SLURM_JOB_NAME"
 fi
 rscript="$job_name.R" # R script to run
-scripts_dir="s-latissima-genome-v2/" # scripts directory
-[[ -d "$scripts_dir" ]] && rscript="${scripts_dir}$rscript"
+scripts_dir="s-latissima-genome-v2" # scripts directory
+[[ -d "$scripts_dir" ]] && rscript="$scripts_dir/$rscript"
 sum_dir="busco_summaries" # output directory
 # BUSCO lineages
 lineages=(

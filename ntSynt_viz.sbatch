@@ -19,8 +19,8 @@ date_str="$(date +"%m-%d-%y")" # filename date format
 outdir="${job_name}_${date_str}_$SLURM_JOB_ID" # output directory
 rscript="$job_name.R" # R script
 # Scripts directory
-scripts_dir="s-latissima-genome-v2/"
-[[ -d "$scripts_dir" ]] && rscript="${scripts_dir}${rscript}"
+scripts_dir="s-latissima-genome-v2"
+[[ -d "$scripts_dir" ]] && rscript="$scripts_dir/$rscript"
 
 # Help message
 if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]
@@ -87,7 +87,11 @@ conv_link="https://raw.githubusercontent.com/BirolLab/ntSynt-viz/main/conversion
 merge_link="https://raw.githubusercontent.com/BirolLab/ntSynt/main/bin/ntsynt_merge_collinear.py"
 conv_py="$(basename "$conv_link")"
 merge_py="$(basename "$merge_link")"
-[[ -d "$scripts_dir" ]] && { conv_py="${scripts_dir}${conv_py}"; merge_py="${scripts_dir}${merge_py}"; }
+if [[ -d "$scripts_dir" ]]
+then
+  conv_py="${scripts_dir}${conv_py}"
+  merge_py="${scripts_dir}${merge_py}"
+fi
 if [[ ! -f "$conv_py" ]]
 then
   if [[ -d "$scripts_dir" ]]

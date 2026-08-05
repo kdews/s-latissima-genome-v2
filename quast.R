@@ -10,15 +10,15 @@ library(tidyverse)
 # Input
 # Only take command line input if not running interactively
 if (interactive()) {
-  setwd("/project2/noujdine_61/kdeweese/latissima/corteva_genome/")
-  assembly_file <- "s_latissima_genome_list.txt"
-  # Output directory
-  outdir <- "./"
+  wd <- "/project2/noujdine_61/kdeweese/latissima/corteva_genome"
+  setwd(wd)
+  in_tsv <- "s-latissima-genome-v2/genomes_metadata.tsv" # input genome TSV
+  scripts_dir <- "s-latissima-genome-v2" # scripts directory
 }
-pretty_labs_file <- "pretty_genome_labels.tsv" # pretty label table
-n_content_file <- "N_content_per_100_kb.png"
+n_plot_file <- "N_content_per_100_kb.png"
 # Prepend output directory to file names (if it exists)
-if (dir.exists(outdir)) n_content_file <- paste0(outdir, n_content_file)
+outdir <- file.path(scripts_dir, "figures")
+if (dir.exists(outdir)) n_plot_file <- file.path(outdir, n_plot_file)
 # Order for label factor
 lbl_order <- c(
   "latissima.*US",
@@ -43,13 +43,10 @@ formatSpc <- function(spc) {
 }
 
 # Data wrangling
-# Import data frame of assembly labels and FASTAs
-genome_tab <- read.table(assembly_file, sep = "\t", header = T, fill = NA,
+# Import data frame of genome metadata
+genome_tab <- read.table(in_tsv, sep = "\t", header = T, fill = NA,
                          comment.char = "", check.names = F)
 colnames(genome_tab) <- gsub("#| ", "", colnames(genome_tab))
-# Annotate with pretty labels
-pretty_labs <- read_tsv(pretty_labs_file)
-genome_tab <- left_join(pretty_labs, genome_tab)
 # Sort "Pretty_Label" column with factor for plotting
 lbl_lvls <- sapply(regex(lbl_order),
                    grep,
@@ -59,6 +56,8 @@ lbl_lvls <- sapply(regex(lbl_order),
   unname() %>%
   unlist()
 genome_tab <- genome_tab %>%
+  # Keep only labels
+  select(Label, Pretty_Label) %>%
   mutate(
     # Factor "Pretty_Label"
     Pretty_Label = factor(Pretty_Label, levels = rev(lbl_lvls)),
@@ -142,4 +141,4 @@ p_n <- ggplot(data = n_content,
     legend.text = element_text(face = "italic"),
     strip.placement = "outside"
   )
-ggsave(p_n, filename = n_content_file, bg = "white", width = 9, height = 6)
+ggsave(p_n, filename = n_plot_file, bg = "white", width = 9, height = 6)
