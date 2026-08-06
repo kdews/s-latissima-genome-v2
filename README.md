@@ -92,6 +92,9 @@ Generate BUSCO summary files and comparative plots after the BUSCO jobs have com
 sbatch s-latissima-genome-v2/eval_genomes.sh s-latissima-genome-v2/genomes_metadata.tsv s-latissima-genome-v2/busco_compare.sbatch
 ```
 
+##### Result
+![alt text](figures/busco_stramenopiles_odb12.2.png)
+
 Assembly-length and scaffold-contiguity visualization with [`scaffold_eval.R`](scaffold_eval.R) is planned but is not yet called by the pipeline.
 
 ## 4. Cactus installation
