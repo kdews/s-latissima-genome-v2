@@ -144,31 +144,13 @@ violinPlot <- function(idx, sum_idx, n50 = NULL) {
     coord_cartesian(clip = "off")
   # Label N50/L50 on top of violins and mark N50 with dashed line on graph
   p_n50 <- p +
-    geom_crossbar(
-      data = sum_idx,
-      aes(
-        x = Label,
-        y = N50 * 1e6,
-        ymin = N50 * 1e6,
-        ymax = N50 * 1e6
-      ),
-      width = 0.8,
-      linetype = "dashed",
-      linewidth = 0.1,
-      alpha = 0.8
-    ) +
-    geom_label(
-      data = sum_idx,
-      aes(
-        x = Label,
-        y = N50* 1e6,
-        label = n50_lab
-      ),
-      position = position_nudge(x = -0.35, y = 0.3),
-      size = 3,
-      fill = "white"
-      # fill = NA
-    ) +
+    geom_crossbar(data = sum_idx,
+                  aes(x = Label, y = N50 * 1e6, ymin = N50 * 1e6,
+                      ymax = N50 * 1e6),
+      linetype = "dashed", linewidth = 0.1, width = 0.8, alpha = 0.8) +
+    geom_label(data = sum_idx, aes(x = Label, y = N50 * 1e6, label = n50_lab),
+               position = position_nudge(x = -0.35, y = 0.3),
+               size = 3, fill = "white") +
     theme(panel.ontop = F, panel.border = element_rect(fill = NA))
   if (missing(n50)) {
     return(p)
@@ -180,48 +162,55 @@ violinPlot <- function(idx, sum_idx, n50 = NULL) {
 }
 # Create annotated graphs of contig length distribution by assembly version
 distPlot <- function(idx, limit = 1e6) {
-  p <- idx %>%
+  if (is.numeric(limit)) {
+    var_type <- "limit"
+    legend_title <- c(paste("<", limit/1e6, "Mb"), paste(">", limit/1e6, "Mb"))
+  } else if (is.character(limit) & limit == "n50") {
+    var_type <- "n50"
+    legend_title <- c("< n50", "> n50")
+  } else {
+    cat("Error: unrecognized argument to 'limit' variable.",
+          "Expected either numeric or 'n50'.\n")
+  }
+  dist_idx <- idx %>%
     arrange(Label, desc(Length)) %>%
     group_by(Label) %>%
-    mutate(n = n(),
-           ID = 1:unique(n),
-           n50 = Biostrings::N50(Length),
-           Cutoff = case_when(Length >= limit ~ paste(">", limit/1e6, "Mb"),
-                              .default = paste("<", limit/1e6, "Mb"))) %>%
-    ungroup() %>%
-    ggplot(mapping = aes(x = ID, y = Length)) +
-    geom_hline(col = "red", lty = 2, show.legend = T,
-      yintercept = limit
-      # yintercept = n50
-    ) +
-    geom_col(aes(
-      # col = Cutoff, fill = Cutoff,
-      col = Length >= limit, fill = Length >= limit,
-      # col = Length >= n50, fill = Length >= n50
-    )) +
-    scale_color_manual(
-      name = "Length",
-      labels = c(paste("<", limit/1e6, "Mb"), paste(">", limit/1e6, "Mb")),
-      values = c("lightgrey", "darkblue"),
-      aesthetics = c("color", "fill"),
-      guide = guide_legend(reverse = T)
-    ) +
+    mutate(n = n(), ID = 1:unique(n),
+           limit = limit, n50 = Biostrings::N50(Length)) %>%
+    ungroup()
+  sum_dist_idx <- dist_idx %>%
+    group_by(Label, Pretty_Label, Species, Region, Version) %>%
+    summarize(x_pos = max(ID) * 0.9, n50 = unique(n50),
+              limit = unique(limit), .groups = "drop")
+  ggplot(data = dist_idx, mapping = aes(x = ID, y = Length)) +
+    # Horizontal line at limit
+    geom_hline(aes(yintercept = .data[[var_type]]), color = "red", lty = 2) +
+    # Label limit
+    geom_text(data = sum_dist_idx, color = "red",
+              mapping = aes(x = x_pos, y = .data[[var_type]] * 4,
+                            label = paste(round(.data[[var_type]]/1e6, 2),
+                                          "Mb"))) +
+    # Log-scale barplot of scaffold and contig lengths
+    geom_col(aes(col = Length >= .data[[var_type]],
+                 fill = Length >= .data[[var_type]])) +
+    # Set colors above and below cutoff
+    scale_color_manual(name = "Length", values = c("lightgrey", "darkblue"),
+                       aesthetics = c("color", "fill"), labels = legend_title,
+                       guide = guide_legend(reverse = T)) +
+    # Remove space to the left of the bars
+    scale_x_continuous(expand = c(0, 0)) +
     # Convert length to log10 scale
     scale_y_log10(labels = label_log()) +
-    scale_x_continuous(expand = c(0, 0)) +
-    labs(x = "", y = "Length (bp)") +
     facet_wrap(~ Pretty_Label, scales = "free_x") +
+    labs(x = "", y = "Length (bp)") +
     theme_bw() +
     theme(strip.text = element_text(face = "italic"), # italicize species
           strip.background = element_blank(),
           # legend.direction = "vertical",
           legend.position = "top", legend.title.position = "left")
-  return(p)
 }
 
 # Read in data
-# genome_tab <- read_tsv(in_tsv, col_names = F, comment = "#")
-# colnames(genome_tab) <- c("Label", "Assembly")
 genome_tab <- read.table(in_tsv, sep = "\t", header = T, fill = NA,
                          comment.char = "", check.names = F)
 colnames(genome_tab) <- gsub("#| ", "", colnames(genome_tab))
@@ -298,15 +287,10 @@ idx <- idx %>%
 # Summarize data frame
 sum_idx <- sumDf(idx)
 
-# Plots
-# Plot length distributions using violin plots
+# Plot assembly length distributions
 p_l <- violinPlot(idx, sum_idx, n50 = T)
-# p_d <- distPlot(idx, 1e6)
-# # Save plots
-# print(paste("Saving violin plot to:", vio_plot))
-# ggsave(filename = vio_plot, plot = p_l, bg = "white", width = 9, height = 7)
-# print(paste("Saving barplot plot to:", bar_plot))
-# ggsave(filename = bar_plot, plot = p_d, bg = "white", width = 10, height = 6)
+p_d <- distPlot(idx, 1e6)
+p_d_n50 <- distPlot(idx, "n50")
 
 # Compare all v2 assemblies by region 
 comp_v2_idx <- idx %>%
@@ -317,6 +301,18 @@ comp_v2_idx <- idx %>%
   mutate(n = as.numeric(factor(ID, levels = unique(ID))),
          Type = case_when(row_number() <= 31 ~ "chromosome",
                           .default = "contig"))
+# Save tables of labeled v2 chromosome IDs for Minigraph-Cactus pangenome
+v2_contig_type <- comp_v2_idx %>%
+  ungroup() %>%
+  select(Label, ID, Type) %>%
+  filter(Type == "chromosome") %>%
+  mutate(Filename = paste0(Label, "-", Type, "_ids.txt"))
+for (contig_file in unique(v2_contig_type$Filename)) {
+  tmp_df <- v2_contig_type %>%
+    filter(Filename == contig_file) %>%
+    select(ID)
+  write_tsv(x = tmp_df, file = contig_file, col_names = F)
+}
 # Plot v2 assemblies showing chromosome & contig split (log10-scale)
 p_comp_v2 <- ggplot(comp_v2_idx, aes(x = n, y = Length)) +
   geom_vline(xintercept = 31, linetype = "dashed", alpha = 0.4) +
@@ -327,9 +323,9 @@ p_comp_v2 <- ggplot(comp_v2_idx, aes(x = n, y = Length)) +
   scale_y_log10(name = "Length (bp)", label = label_log()) +
   labs(title = expression("Chromosome length in " * italic("S. latissima") *
                             " v2 assemblies")) +
-  theme_bw()
-# # Save plot of region comparison
-# ggsave(filename = comp_v2_plot, plot = p_comp_v2, width = 7, height = 5)
+  theme_bw() +
+  theme(legend.position = "inside", legend.justification = c(0.9, 0.9),
+        legend.background = element_rect(color = "darkgrey"))
 
 # Compare polished and unpolished US assemblies
 comp_polish_idx <- idx %>%
@@ -338,8 +334,8 @@ comp_polish_idx <- idx %>%
   group_by(Label) %>%
   arrange(desc(Length), .by_group = T) %>%
   mutate(n = as.numeric(factor(ID, levels = unique(ID))),
-         Type = case_when(row_number() <= 31 ~ "chromosome",
-                          .default = "contig"))
+         Type = case_when(row_number() <= 31 ~ "chromosomes",
+                          .default = "contigs"))
 p_comp_polish <- ggplot(comp_polish_idx,
                         aes(x = n, y = Length)) +
   geom_col(aes(fill = Version), position = "dodge") +
@@ -350,23 +346,17 @@ p_comp_polish <- ggplot(comp_polish_idx,
        title = expression("Impact of polishing on length (US " * 
                             italic("S. latissima") * ")")) +
   theme_bw()
-# # Save plot of polished comparison
-# ggsave(filename = comp_polish_plot, plot = p_comp_polish, width = 10,
-#        height = 10)
 
-# Save table of labeled chromosome and contig IDs for v2 assemblies
-v2_contig_type <- comp_v2_idx %>%
-  ungroup() %>%
-  select(Label, ID, Type) %>%
-  mutate(Filename = paste0(Label, "-", Type, "_ids.txt"))
-# for (contig_file in unique(v2_contig_type$Filename)) {
-#   tmp_df <- v2_contig_type %>%
-#     filter(Filename == contig_file) %>%
-#     select(ID)
-#   write_tsv(x = tmp_df, file = contig_file, col_names = F)
-# }
-
-p_l
-p_comp_v2
-p_comp_polish
-v2_contig_type
+# Save plots
+# Violin plot
+cat("Saving assembly violin plots to:", vio_plot)
+ggsave(filename = vio_plot, plot = p_l, bg = "white", width = 9, height = 7)
+cat("Saving contig length barplot plots to:", bar_plot)
+ggsave(filename = bar_plot, plot = p_d, bg = "white", width = 10, height = 6)
+# US vs. France v2 comparison
+cat("Saving US vs. France v2 comparison plot to:", comp_v2_plot)
+ggsave(filename = comp_v2_plot, plot = p_comp_v2, width = 7, height = 5)
+# US polishing comparison
+cat("Saving US polishing comparison plot to:", comp_polish_plot)
+ggsave(filename = comp_polish_plot, plot = p_comp_polish, width = 10,
+       height = 10)

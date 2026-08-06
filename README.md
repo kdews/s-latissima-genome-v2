@@ -14,7 +14,7 @@ The analysis is organized by [`genome_analysis_pipeline.sh`](genome_analysis_pip
 | `filt_prog_seqFile` | size-filtered Progressive Cactus sequence file | `s-latissima-genome-v2/s_latissima_prog_align.filt_1000000.txt` |
 | `ref_id` | Reference assembly identifier for the pangenome analysis | `corteva_v2` |
 | `quer_id` | Query assembly identifier used when extracting a pairwise HAL | `roscoff_v2` |
-| `pangenome_dir` | Minigraph-Cactus output directory | `cactus_pangenome_01-28-26_6039802` |
+| `pangenome_dir` | Minigraph-Cactus output directory | `cactus_pangenome_results/01-28-26_6039802` |
 
 ### Run the complete pipeline
 

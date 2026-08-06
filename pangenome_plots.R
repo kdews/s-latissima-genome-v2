@@ -96,7 +96,7 @@ if (interactive()) {
   # Set working directory
   wd <- "/project2/noujdine_61/kdeweese/latissima/corteva_genome"
   setwd(wd)
-  paf_file <- "cactus_pangenome_01-28-26_6039802/synteny_PAFs/merged_synteny.paf"
+  paf_file <- "cactus_pangenome_results/01-28-26_6039802/synteny_PAFs/merged_synteny.paf"
   ref <- "corteva_v2" # the --reference assembly prefix (as it appears in PAF tname)
   query <- "roscoff_v2" # second assembly name (as in PAF qname)
   seqFile <- "s-latissima-genome-v2/s_latissima_align.txt" # Cactus seqFile
@@ -112,8 +112,8 @@ if (interactive()) {
 
 # Create output directories
 chrom_dir <- file.path(outdir, "per_chromosome")
-dir.create(outdir)
-dir.create(chrom_dir)
+dir.create(outdir, recursive = T)
+dir.create(chrom_dir, recursive = T)
 
 # Import Cactus seqFile as table
 cactus_tab <- read_tsv(seqFile, col_names = c("Label", "Assembly"))

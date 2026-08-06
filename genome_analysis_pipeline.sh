@@ -45,49 +45,49 @@ pan_seqFile='s_latissima_align1.txt'
 prog_seqFile='s_latissima_prog_align.txt'
 ref_id='corteva_v2'
 quer_id='roscoff_v2'
-pangenome_dir='cactus_pangenome_01-28-26_6039802'
+pangenome_dir='cactus_pangenome_results/01-28-26_6039802'
 
 # Input data
 # Download assembly FASTAs and sequencing reads and name by assembly labels
-sbatch "$scripts_dir"/get_data.sbatch "$in_tsv"
+sbatch "$scripts_dir/get_data.sbatch" "$scripts_dir/$in_tsv"
 
 # Evaluate basic assembly statistics
 # Optional: download BUSCO lineage first
-sbatch "$scripts_dir"/lineage_download.sbatch
+sbatch "$scripts_dir/lineage_download.sbatch"
 # Run QUAST and BUSCO
-sbatch "$scripts_dir"/eval_genomes.sh "$in_tsv" \
-  "$scripts_dir"/busco.sbatch "$scripts_dir"/quast.sbatch
+sbatch "$scripts_dir/eval_genomes.sh" "$scripts_dir/$in_tsv" \
+  "$scripts_dir/busco.sbatch" "$scripts_dir/quast.sbatch"
 # Generate BUSCO summary files and visualize
-sbatch "$scripts_dir"/eval_genomes.sh "$in_tsv" \
-  "$scripts_dir"/busco_compare.sbatch
+sbatch "$scripts_dir/eval_genomes.sh" "$scripts_dir/$in_tsv" \
+  "$scripts_dir/busco_compare.sbatch"
 # # Visualization (NEED TO ADD)
 # "$scripts_dir"/scaffold_eval.R
 
 # Cactus alignments
 # Install Cactus
-sbatch "$scripts_dir"/cactus_install_conda.sh
+sbatch "$scripts_dir/cactus_install_conda.sh"
 
 # 1. Cactus Pangenome
 # Run Minigraph-Cactus alignment
-sbatch "$scripts_dir"/cactus_pangenome.sbatch "$pan_seqFile" "$ref_id"
+sbatch "$scripts_dir/cactus_pangenome.sbatch" "$scripts_dir/$pan_seqFile" "$ref_id"
 # Extract HAL from pangenome PAFs
-sbatch "$scripts_dir"/hal_extract.sbatch "$pangenome_dir" "$ref_id" "$quer_id"
+sbatch "$scripts_dir/hal_extract.sbatch" "$pangenome_dir" "$ref_id" "$quer_id"
 # Generate pangenome plots with R
-sbatch "$scripts_dir"/pangenome_plots.sbatch
+sbatch "$scripts_dir/pangenome_plots.sbatch"
 # Generate per-chromosome ODGI graphs
-sbatch "$scripts_dir"/odgi_viz.sbatch "$pan_seqFile" "$pangenome_dir"
+sbatch "$scripts_dir/odgi_viz.sbatch" "$scripts_dir/$pan_seqFile" "$pangenome_dir"
 # Generate ntSynt-viz pangenome graph
-sbatch "$scripts_dir"/ntSynt_viz.sbatch "$pan_seqFile" "$pangenome_dir"
+sbatch "$scripts_dir/ntSynt_viz.sbatch" "$scripts_dir/$pan_seqFile" "$pangenome_dir"
 
 # 2. Progressive Cactus
 # Make Cactus guide tree
-sbatch "$scripts_dir"/make_guide_tree.sbatch "$prog_seqFile"
+sbatch "$scripts_dir/make_guide_tree.sbatch" "$scripts_dir/$prog_seqFile"
 # Filter assemblies for Cactus (minimum contig length = 1000000)
-sbatch "$scripts_dir"/filter_assemblies.sbatch "$prog_seqFile" 1000000
+sbatch "$scripts_dir/filter_assemblies.sbatch" "$scripts_dir/$prog_seqFile" 1000000
 # Run Progressive Cactus alignment
-sbatch "$scripts_dir"/prog_cactus.sbatch "$prog_seqFile"
+sbatch "$scripts_dir/prog_cactus.sbatch" "$scripts_dir/$prog_seqFile"
 # Visualize resulting HAL (SCRIPT IN PROGRESS)
-sbatch "$scripts_dir"/hal_visualize.sbatch
+sbatch "$scripts_dir/hal_visualize.sbatch"
 
 # Print date and time
 echo

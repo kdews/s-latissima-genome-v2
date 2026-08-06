@@ -16,7 +16,8 @@ else
   job_name="$SLURM_JOB_NAME"
 fi
 date_str="$(date +"%m-%d-%y")" # filename date format
-outdir="${job_name}_${date_str}_$SLURM_JOB_ID" # output directory
+res_dir="${job_name}_results" # results directory for all jobs
+outdir="$res_dir/${date_str}_$SLURM_JOB_ID" # output directory
 rscript="$job_name.R" # R script
 # Scripts directory
 scripts_dir="s-latissima-genome-v2"
@@ -31,24 +32,25 @@ Runs ntSynt-viz on pangenome GFA result to visualize whole-genome ribbon plots.
 Usage: sbatch $job_name.sbatch <seqFile> <cactus_dir>
 
 Output:
-  ${job_name}_<date>_<jobid>/
-  ├── assembly_names.tsv                     # table of assemblies aligned
-  ├── fais/                                  # FASTA indices of assemblies
-  │   ├── corteva_v2.fai
-  │   └── roscoff_v2.fai
-  ├── fais.txt
-  ├── name_conversion.tsv                    # table correlating assembly labels
-  ├── <seqFile>.chrom-paint-feats.tsv        # coordinates for chrom. painting
-  ├── <seqFile>.links.tsv                    # coordinates for links
-  ├── <seqFile>.merged-blocks.tsv            # coordinates for merged blocks
-  ├── <seqFile>.non-merge-blocks.tsv         # coordinates for non-merged blocks
-  ├── <seqFile>.sequence_lengths.sorted.tsv  # sorted table of sequence lengths
-  ├── <seqFile>.target_colours.tsv           # table of sequences and colors
-  ├── <seqFile>_est-distances.nwk            # distances Newick tree
-  ├── <seqFile>_est-distances.order.tsv      # table of ordered distances 
-  ├── <seqFile>_est-distances.phylip         # distances Phylip
-  ├── <seqFile>_est-distances.tsv            # table of distances
-  └── <seqFile>_ribbon-plot.png              # pangenome ribbon plot
+  ${job_name}_results/
+      └── ${date_str}_<job_id>
+          ├── assembly_names.tsv                    # table of assemblies aligned
+          ├── fais/                                 # FASTA indices of assemblies
+          │   ├── corteva_v2.fai
+          │   └── roscoff_v2.fai
+          ├── fais.txt
+          ├── name_conversion.tsv                   # table correlating assembly labels
+          ├── <seqFile>.chrom-paint-feats.tsv       # coordinates for chrom. painting
+          ├── <seqFile>.links.tsv                   # coordinates for links
+          ├── <seqFile>.merged-blocks.tsv           # coordinates for merged blocks
+          ├── <seqFile>.non-merge-blocks.tsv        # coordinates for non-merged blocks
+          ├── <seqFile>.sequence_lengths.sorted.tsv # sorted table of sequence lengths
+          ├── <seqFile>.target_colours.tsv          # table of sequences and colors
+          ├── <seqFile>_est-distances.nwk           # distances Newick tree
+          ├── <seqFile>_est-distances.order.tsv     # table of ordered distances 
+          ├── <seqFile>_est-distances.phylip        # distances Phylip
+          ├── <seqFile>_est-distances.tsv           # table of distances
+          └── <seqFile>_ribbon-plot.png             # pangenome ribbon plot
 Requires: ntSynt-viz (https://github.com/BirolLab/ntSynt-viz/)"
   exit 0
 fi

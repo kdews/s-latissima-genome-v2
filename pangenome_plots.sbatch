@@ -58,7 +58,7 @@ echo
 
 # Input
 # Merged PAF file
-paf_file="cactus_pangenome_01-28-26_6039802/synteny_PAFs/merged_synteny.paf"
+paf_file="cactus_pangenome_results/01-28-26_6039802/synteny_PAFs/merged_synteny.paf"
 # The --reference assembly prefix (as it appears in PAF tname)
 ref="corteva_v2"
 # The second assembly name (as in PAF qname)

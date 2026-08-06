@@ -66,7 +66,7 @@ parser$add_argument("--order",
 
 if (interactive()) {
   seqFile_no_ext <- "s_latissima_align1"
-  outdir <- "ntSynt_viz_05-22-26_8931290"
+  outdir <- "ntSynt_viz_results/05-22-26_8931290"
   args <- c(
     "--format", "png",
     "--height", "20",

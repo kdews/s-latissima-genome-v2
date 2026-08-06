@@ -16,7 +16,8 @@ else
   job_name="$SLURM_JOB_NAME"
 fi
 date_str="$(date +"%m-%d-%y")" # filename date format
-outdir="${job_name}_${date_str}_$SLURM_JOB_ID" # output directory
+res_dir="${job_name}_results" # results directory for all jobs
+outdir="$res_dir/${date_str}_$SLURM_JOB_ID" # output directory
 rscript="$job_name.R" # R script
 # Scripts directory
 scripts_dir="s-latissima-genome-v2/"
@@ -34,19 +35,20 @@ path relationships across assemblies.
 Usage: sbatch $job_name.sbatch <seqFile> <cactus_dir>
 
 Output:
-  ${job_name}_<date>_<jobid>/
-  ├── graph.raw.og                     # ODGI graph converted from GFA
-  ├── graph.sorted.og                  # path-guided sorted ODGI graph
-  ├── graph.stats.txt                  # graph statistics summary
-  ├── graph.paths.txt                  # list of graph paths/genomes
-  ├── graph.overview.compressed.png    # compressed whole-pangenome overview
-  ├── graph.overview.paths.png         # whole-pangenome path visualization
-  └── <seqid>/                         # per-chromosome (ref) visualizations
-    ├── <seqid>.full.sorted.og
-    ├── <seqid>.full.stats.txt
-    ├── <seqid>.full.lay
-    ├── <seqid>.full.draw.png
-    └── <seqid>.full.viz.png
+  ${job_name}_results/
+      └── ${date_str}_<job_id>/
+          ├── graph.raw.og                  # ODGI graph converted from GFA
+          ├── graph.sorted.og               # path-guided sorted ODGI graph
+          ├── graph.stats.txt               # graph statistics summary
+          ├── graph.paths.txt               # list of graph paths/genomes
+          ├── graph.overview.compressed.png # compressed whole-pangenome overview
+          ├── graph.overview.paths.png      # whole-pangenome path visualization
+          └── <seqid>/                      # per-chromosome (ref) visualizations
+            ├── <seqid>.full.sorted.og
+            ├── <seqid>.full.stats.txt
+            ├── <seqid>.full.lay
+            ├── <seqid>.full.draw.png
+            └── <seqid>.full.viz.png
   
 Requires: ODGI (https://github.com/pangenome/odgi)"
   exit 0
