@@ -92,10 +92,30 @@ Generate BUSCO summary files and comparative plots after the BUSCO jobs have com
 sbatch s-latissima-genome-v2/eval_genomes.sh s-latissima-genome-v2/genomes_metadata.tsv s-latissima-genome-v2/busco_compare.sbatch
 ```
 
-##### Result
+##### Results
+
+Stramenopiles BUSCO
 ![alt text](figures/busco_stramenopiles_odb12.2.png)
 
+Eukaryota BUSCO
+![alt text](figures/busco_eukaryota_odb12.2.png)
+
+### Evaluation of assembly composition
+
 Assembly-length and scaffold-contiguity visualization with [`scaffold_eval.R`](scaffold_eval.R) is planned but is not yet called by the pipeline.
+
+##### Results
+
+Comparisons of chromosome and contig lengths across all compared species, highlighting assembly statistics
+![alt text](figures/scaffold_sizes_violin_log.png)
+![alt text](figures/scaffold_sizes_bar.png)
+
+Comparison of chromosome and contig lengths between US and France *S. latissima* v2 assemblies
+![alt text](figures/comp_v2_length.png)
+
+Impact of polishing on chromosome and contig lengths in US *S. latissima* v2 assembly
+![alt text](figures/comp_polish_length.png)
+
 
 ## 4. Cactus installation
 
@@ -153,6 +173,10 @@ sbatch s-latissima-genome-v2/hal_extract.sbatch cactus_pangenome_01-28-26_603980
 sbatch s-latissima-genome-v2/pangenome_plots.sbatch
 ```
 
+##### Results
+
+![alt text](figures/pangenome_plots/whole_genome_ribbon.png)
+
 ### Visualize per-chromosome pangenome graphs with ODGI
 
 Generate per-chromosome graph visualizations with [ODGI](https://github.com/pangenome/odgi).
@@ -178,7 +202,7 @@ Generate a pangenome graph with [ntSynt-viz](https://github.com/bcgsc/ntSynt-viz
 ##### Example
 
 ```bash
-sbatch s-latissima-genome-v2/ntSynt_viz.sbatch s-latissima-genome-v2/s_latissima_align1.txt cactus_pangenome_01-28-26_6039802
+sbatch s-latissima-genome-v2/ntSynt_viz.sbatch s-latissima-genome-v2/s_latissima_align1.txt cactus_pangenome_results/01-28-26_6039802
 ```
 
 ## 6. Multi-species whole-genome alignment with Progressive Cactus
@@ -196,6 +220,17 @@ Create a guide tree for the genomes listed in the [Progressive Cactus](https://g
 ```bash
 sbatch s-latissima-genome-v2/make_guide_tree.sbatch s-latissima-genome-v2/s_latissima_prog_align.txt
 ```
+
+##### Results
+
+Distribution of orthologs with unique sequence in orthogroups conserved across all compared species
+![alt text](figures/s_latissima_prog_align-unique_og_dist.png)
+
+Neighbor-joining (NJ) and Maximum-likelihood (ML) trees built from BUSCO predicted protein alignments
+![alt text](figures/s_latissima_prog_align-NJ_ML_trees.png)
+
+Maximum-likelihood (ML) tree showing BUSCO predicted protein alignments
+![alt text](figures/s_latissima_prog_align-msa_ML_tree.png)
 
 ### Filter assemblies by contig length
 

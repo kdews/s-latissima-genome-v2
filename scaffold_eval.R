@@ -129,6 +129,8 @@ violinPlot <- function(idx, sum_idx, n50 = NULL) {
     #                    scale = vio_scale) +
     # Boxplot: overlay statistical summary
     geom_boxplot(width = 0.1) +
+    facet_wrap(~ Species + Region, scales = "free_x", space = "free_x",
+               nrow = 1) +
     # Label assembly total size and n()
     geom_text(data = sum_idx, mapping = aes(x = Label, y = max_y * 5),
               label = size_lab) +
@@ -137,10 +139,10 @@ violinPlot <- function(idx, sum_idx, n50 = NULL) {
     # Convert y-axis from bp to log10 bp scale
     scale_y_log10(labels = label_log()) +
     ylab("Length (bp)") +
-    facet_wrap(~ Species + Region, scales = "free_x", space = "free_x",
-               nrow = 1) +
     theme_bw() +
-    theme(strip.text = element_text(size = 14, face = "italic")) +
+    theme(strip.text = element_text(size = 14, face = "italic"),
+          panel.ontop = F, panel.border = element_blank(),
+          panel.background = element_rect(colour = "black", fill = NA)) +
     coord_cartesian(clip = "off")
   # Label N50/L50 on top of violins and mark N50 with dashed line on graph
   p_n50 <- p +
@@ -150,14 +152,13 @@ violinPlot <- function(idx, sum_idx, n50 = NULL) {
       linetype = "dashed", linewidth = 0.1, width = 0.8, alpha = 0.8) +
     geom_label(data = sum_idx, aes(x = Label, y = N50 * 1e6, label = n50_lab),
                position = position_nudge(x = -0.35, y = 0.3),
-               size = 3, fill = "white") +
-    theme(panel.ontop = F, panel.border = element_rect(fill = NA))
+               size = 3, fill = "white")
   if (missing(n50)) {
     return(p)
   } else if (n50) {
     return(p_n50)
   } else {
-    print("Error: unrecognized argument to 'annot' variable.")
+    cat("Error: unrecognized argument to 'annot' variable.\n")
   }
 }
 # Create annotated graphs of contig length distribution by assembly version
@@ -349,14 +350,15 @@ p_comp_polish <- ggplot(comp_polish_idx,
 
 # Save plots
 # Violin plot
-cat("Saving assembly violin plots to:", vio_plot)
-ggsave(filename = vio_plot, plot = p_l, bg = "white", width = 9, height = 7)
-cat("Saving contig length barplot plots to:", bar_plot)
+cat("Saving assembly violin plots to:", vio_plot, "\n")
+vio_width <- 9 * dim(sum_idx)[1]/5
+ggsave(filename = vio_plot, plot = p_l, bg = "white", width = vio_width, height = 7)
+cat("Saving contig length barplot plots to:", bar_plot, "\n")
 ggsave(filename = bar_plot, plot = p_d, bg = "white", width = 10, height = 6)
 # US vs. France v2 comparison
-cat("Saving US vs. France v2 comparison plot to:", comp_v2_plot)
+cat("Saving US vs. France v2 comparison plot to:", comp_v2_plot, "\n")
 ggsave(filename = comp_v2_plot, plot = p_comp_v2, width = 7, height = 5)
 # US polishing comparison
-cat("Saving US polishing comparison plot to:", comp_polish_plot)
+cat("Saving US polishing comparison plot to:", comp_polish_plot, "\n")
 ggsave(filename = comp_polish_plot, plot = p_comp_polish, width = 10,
        height = 10)

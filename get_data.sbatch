@@ -88,6 +88,9 @@ then
   exit 1
 fi
 
+set -o pipefail
+shopt -s nullglob
+
 # Print Slurm job information
 [[ -n "$SLURM_JOB_ID" ]] && echo "\
 ==========================================
@@ -95,9 +98,6 @@ SLURM_JOB_ID = $SLURM_JOB_ID
 SLURM_JOB_NODELIST = $SLURM_JOB_NODELIST
 TMPDIR = $TMPDIR
 =========================================="
-
-set -o pipefail
-shopt -s nullglob
 
 # Load conda
 module purge
@@ -114,8 +114,7 @@ fi
 nthrd="${SLURM_CPUS_PER_TASK:-1}"
 
 # Input
-# in_tsv='genomes_metadata.tsv'
-in_tsv="$1"
+in_tsv="${1:-genomes_metadata.tsv}"
 [[ -r $in_tsv ]] || die "Cannot read input TSV: $in_tsv"
 
 # Output

@@ -17,20 +17,20 @@ fi
 # Help message
 show_help () {
     echo "\
-  Runs BUSCO and QUAST on list of genome assemblies.
+Runs BUSCO and QUAST on assemblies found from TSV manifest of genome metadata.
 
-  Usage:
-    Shell:
-      bash $job_name.sh <in_tsv> [path/to/busco.sbatch] [path/to/quast.sbatch]
-      bash $job_name.sh <in_tsv> [path/to/busco_compare.sbatch]
-    Slurm:
-      sbatch $job_name.sh <in_tsv> [path/to/busco.sbatch] [path/to/quast.sbatch]
-      sbatch $job_name.sh <in_tsv> [path/to/busco_compare.sbatch]
+Usage:
+  Shell:
+    bash $job_name.sh <in_tsv> [path/to/busco.sbatch] [path/to/quast.sbatch]
+    bash $job_name.sh <in_tsv> [path/to/busco_compare.sbatch]
+  Slurm:
+    sbatch $job_name.sh <in_tsv> [path/to/busco.sbatch] [path/to/quast.sbatch]
+    sbatch $job_name.sh <in_tsv> [path/to/busco_compare.sbatch]
 
-  Requires:
-  - BUSCO (https://busco.ezlab.org)
-  - QUAST (https://quast.sourceforge.net)
-  - R (https://www.r-project.org)"
+Requires:
+ - BUSCO (https://busco.ezlab.org)
+ - QUAST (https://quast.sourceforge.net)
+ - R (https://www.r-project.org)"
 }
 # Catch help flag or missing argument(s)
 if [[ $1 == "-h" || $1 == "--help" ]]
@@ -222,83 +222,6 @@ do
   fi
 done
 echo
-
-# # Iterate through given genome assemblies
-# for label in "${labels[@]}"
-# do
-#   assembly="assemblies/$label.fa"
-#   [[ -f "$assembly" ]] || { echo "Error: assembly ($assembly) not found."; exit 1; }
-#   # Preserve first-seen ordering of clean labels
-#   clean_label="${label%%_v[0-9]*}"
-#   if [[ -z ${seen_clean_label[$clean_label]+x} ]]
-#   then
-#     clean_labels+=("$clean_label")
-#     seen_clean_label["$clean_label"]=1
-#   fi
-#   # Labels and paths contain no whitespace, use space-delimited values
-#   assemblies_by_clean_label["$clean_label"]+="$assembly "
-#   # Check for assembly reads
-#   # Find FASTQ(s) named by label stripped of version number
-#   pe1="reads/${clean_label}_1.fastq.gz"
-#   pe2="reads/${clean_label}_2.fastq.gz"
-#   long_pb="reads/${clean_label}_pacbio.fastq.gz"
-#   long_ont="reads/${clean_label}_nanopore.fastq.gz"
-#   if [[ -f "$long_pb" || -f "$long_ont" || -f "$pe1" && -f "$pe2" ]]
-#   then
-#     reads_opt=reads
-#   else
-#     reads_opt=no_reads
-#   fi
-#   for script in "${script_list[@]}"
-#   do
-#     script_no_ext="$(basename "$script")"
-#     script_no_ext="${script_no_ext%%.*}"
-#     log="${script_no_ext}_logs/${script_no_ext}_$label.log" # per-assembly log
-#     if [[ -f "$script" ]]
-#     then
-#       if [[ "$(basename "$script")" == *busco_compare* ]]
-#       then
-#         echo "Submitting BUSCO compare job for:"
-#         printf '%s\n' "${labels[@]}"
-#         submission=(sbatch "$script" "$in_tsv")
-#         echo "${submission[*]}"
-#         # "${submission[@]}"
-        
-#         # Print date and time
-#         echo
-#         date_fmt="%-I:%M:%S %p (%a %d %b %Y)" # date format
-#         date +"$date_fmt"
-#         exit 0
-#       elif [[ "$(basename "$script")" == *busco* ]]
-#       then
-#         echo "Submitting BUSCO job for: $label"
-#         submission=(
-#           sbatch
-#           -o "$log"
-#           "$script"
-#           "$label"
-#           "$assembly"
-#         )
-#       elif [[ "$(basename "$script")" == *quast* ]]
-#       then
-#         echo "Submitting QUAST job for: $label"
-#         submission=(
-#           sbatch
-#           -o "$log"
-#           "$script"
-#           "$label"
-#           "$reads_opt"
-#           "$assembly"
-#         )
-#       fi
-#     else
-#       echo "Error: script $script not found."
-#       exit 1
-#     fi
-#     echo "${submission[*]}"
-#     # "${submission[@]}"
-#   done
-# done
 
 # Submit one QUAST job per clean label
 for script in "${script_list[@]}"
