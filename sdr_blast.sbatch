@@ -16,7 +16,7 @@ else
   job_name="$SLURM_JOB_NAME"
 fi
 date_str="$(date +"%m-%d-%y")" # filename date format
-outdir="${job_name}_${date_str}_$SLURM_JOB_ID" # output directory
+outdir="${job_name}_results/${date_str}_$SLURM_JOB_ID" # output directory
 rscript="$job_name.R" # R script
 # Scripts directory
 scripts_dir="s-latissima-genome-v2/"
@@ -32,10 +32,10 @@ database for reciprocal BLAST.
 Usage: sbatch $job_name.sbatch <seqFile> <cactus_dir>
 
 Output:
-  ${job_name}_<date>_<jobid>/
-  ├── 
-  ├── 
-  └── 
+  ${job_name}_results/
+  ├── ${date_str}_<jobid>/
+      ├── 
+      └── 
 Requires:
   - gffread (https://github.com/gpertea/gffread)
   - BLAST ()"

@@ -35,17 +35,17 @@ Usage: sbatch $job_name.sbatch
 
 Output:
   $scripts_dir/
-      └── figures/
-          └── $outdir/
-              ├── alignment_summary.tsv         # alignment summary table
-              ├── chr_alignment_summary.tsv     # summary table by chromosome
-              ├── chr_whole_genome_dotplot.png  # dotplot of chromosomes only
-              ├── coverage_summary.png          # coverage summary plots
-              ├── per_chromosome
-              │   ├── chr_<seqid>.png           # chromosome dotplots
-              │   └── <sedid>.png               # contig dotplots
-              ├── whole_genome_dotplot.png      # whole genome dotplot
-              └── whole_genome_ribbon.png       # whole genome ribbon plot
+  └── figures/
+      └── $(basename "$outdir")/
+          ├── alignment_summary.tsv         # alignment summary table
+          ├── chr_alignment_summary.tsv     # summary table by chromosome
+          ├── chr_whole_genome_dotplot.png  # dotplot of chromosomes only
+          ├── coverage_summary.png          # coverage summary plots
+          ├── per_chromosome/
+          │   ├── chr_<seqid>.png           # chromosome dotplots
+          │   └── <sedid>.png               # contig dotplots
+          ├── whole_genome_dotplot.png      # whole genome dotplot
+          └── whole_genome_ribbon.png       # whole genome ribbon plot
 
 Requires: R (https://www.r-project.org/)"
   exit 0

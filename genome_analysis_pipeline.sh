@@ -15,14 +15,14 @@ else
 fi
 
 # Help message
-if [[ $1 == "-h" ]] || [[ $1 == "--help" ]] || (( $# < 2 ))
-then
+show_help () {
   echo "\
-bash $job_name.sh
-sbatch $job_name.sh
-"
-  exit 0
-fi
+Usage:
+  bash $job_name.sh
+  sbatch $job_name.sh"
+}
+# Catch help flag
+[[ $1 == "-h" || $1 == "--help" ]] && { show_help; exit 0; }
 
 # Print Slurm job information
 [[ -n "$SLURM_JOB_ID" ]] && echo "\

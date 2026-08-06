@@ -7,7 +7,7 @@
 
 # Script variables
 # Extract job name from script
-if [[ -z "${SLURM_JOB_NAME}" ]]
+if [[ -z "$SLURM_JOB_NAME" ]]
 then
   job_name="$(basename "$0")"
   job_name="${job_name%%.*}"
@@ -16,8 +16,7 @@ else
 fi
 
 # Help message
-if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]
-then
+show_help () {
   echo "\
 Filters each assembly for contigs longer than provided minimum length (minlen).
 Updates seqFile with paths to filtered assembly FASTAs.
@@ -40,7 +39,18 @@ Output:
 
 Requires:
  - seqkit (https://bioinf.shenwei.me/seqkit/)"
+}
+# Catch help flag or missing argument(s)
+if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]
+then
+  show_help
   exit 0
+elif [[ "$#" -ne 1 ]]
+then
+  echo "Error: 1 positional argument required."
+  echo
+  show_help
+  exit 1
 fi
 
 # Print date and time
@@ -65,19 +75,17 @@ seqkit version || exit 1
 
 # Input
 # Cactus seqFile
-# seqFile=s_latissima_prog_align.txt
-seqFile="$1"
+seqFile="${1:-s-latissima-genome-v2/s_latissima_prog_align.txt}"
 # Minimum length to filter assemblies, e.g., >50kb
-# minlen=50000
-minlen="$2"
+minlen="${2:-50000}"
 if [[ -f "$seqFile" ]]
 then
   echo "Using seqFile: $seqFile"
   # Assembly labels
-  mapfile -t lbl_list < <(grep -v "(" "$seqFile" | awk -F '\t' '{print $1}')
+  mapfile -t labels < <(grep -v "(" "$seqFile" | awk -F '\t' '{print $1}')
   # Paths to assembly FASTAs
-  mapfile -t assembly_list < <(grep -v "(" "$seqFile" | awk -F '\t' '{print $2}')
-  echo "Found ${#assembly_list[@]} assemblies."
+  mapfile -t assemblies < <(grep -v "(" "$seqFile" | awk -F '\t' '{print $2}')
+  echo "Found ${#assemblies[@]} assemblies."
 else
   echo "Error: seqFile ($seqFile) not found."
   exit 1
@@ -97,21 +105,21 @@ cp "$seqFile" "$filt_seqFile"
 
 # Filter each assembly for contigs >minimum length
 filt_asms=()
-for i in "${!assembly_list[@]}"
+for i in "${!assemblies[@]}"
 do
-  lbl="${lbl_list[i]}"
-  asm="${assembly_list[i]}"
+  label="${labels[i]}"
+  asm="${assemblies[i]}"
   asm_no_ext="${asm%%.fasta}"
   asm_no_ext="${asm_no_ext%%.fa}"
   filt_asm="$asm_no_ext.filt_$minlen.fasta"
-  echo "Updating filtered seqFile ($filt_seqFile) with filtered $lbl assembly..."
+  echo "Updating filtered seqFile ($filt_seqFile) with filtered $label assembly..."
   sed -i "s,$asm,$filt_asm,g" "$filt_seqFile"
   if [[ -f "$asm" ]]
   then
-    echo "Filtering $lbl assembly: $asm"
+    echo "Filtering $label assembly: $asm"
     # seqkit seq -m "$minlen" "$asm" > "$filt_asm"
   else
-    echo "Error: $lbl assembly not found at path: $asm"
+    echo "Error: $label assembly not found at path: $asm"
     exit 1
   fi
 done

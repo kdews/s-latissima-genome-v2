@@ -7,7 +7,7 @@
 
 # Script variables
 # Extract job name from script
-if [[ -z "${SLURM_JOB_NAME}" ]]
+if [[ -z "$SLURM_JOB_NAME" ]]
 then
   job_name="$(basename "$0")"
   job_name="${job_name%%.*}"
@@ -18,17 +18,16 @@ outdir="synteny_PAFs" # output directory name
 mergePaf="merged_synteny.paf"
 
 # Help message
-if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]
-then
+show_help () {
   echo "\
 Extracts individual and merged PAF files from chromosome alignments.
 Requires output directory from cactus-pangenome (cactusDir) as input.
-Usage: sbatch $job_name.sbatch <cactusDir> <reference> <query>
+Usage: sbatch $job_name.sbatch <cactusDir> <ref_label> <query_label>
 
 Required input:
   cactusDir         path to directory containing output of cactus-pangenome
-  reference         assembly ID to be used as reference
-  query             assembly ID to be used as query
+  ref_label         assembly label to be used as reference
+  query_label             assembly label to be used as query_label
 
 Output:
   <cactusDir>/$outdir/  output directory for PAFs
@@ -38,7 +37,18 @@ Requires:
  - Toil (https://toil.readthedocs.io/en/latest)
  - Cactus (https://github.com/ComparativeGenomicsToolkit/cactus)
    - contains HALtools distribution (http://github.com/glennhickey/hal)"
+}
+# Catch help flag and missing argument(s)
+if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]
+then
+  show_help
   exit 0
+elif (( $# < 3 ))
+then
+  echo "Error: 3 positional arguments required."
+  echo
+  show_help
+  exit 1
 fi
 
 # Print date and time
@@ -70,28 +80,19 @@ python3 --version
 echo
 
 # Input
-# cactusDir=cactus_pangenome_01-28-26_6039802
-# reference=corteva_v2
-# query=roscoff_v2
-if [[ "$#" -eq 3 ]]
+cactusDir="${1:-cactus_pangenome_results/01-28-26_6039802}"
+ref_label="${2:-corteva_v2}"
+query_label="${3:-roscoff_v2}"
+if [[ -d "$cactusDir" ]]
 then
-  cactusDir="$1"
-  reference="$2"
-  query="$3"
-  if [[ -d "$cactusDir" ]]
-  then
-    # Redirect output
-    echo "Using results in: $cactusDir"
-    outdir="$cactusDir/$outdir"
-    mergePaf="$outdir/$mergePaf"
-    mkdir -p "$outdir"
-    echo "Directing output to: $outdir"
-  else
-    echo "Error: no results directory found ($cactusDir)."
-    exit 1
-  fi
+  # Redirect output
+  echo "Using results in: $cactusDir"
+  outdir="$cactusDir/$outdir"
+  mergePaf="$outdir/$mergePaf"
+  mkdir -p "$outdir"
+  echo "Directing output to: $outdir"
 else
-  echo "Error: 3 positional arguments expected."
+  echo "Error: No results directory found in $cactusDir"
   exit 1
 fi
 
@@ -118,8 +119,8 @@ do
   # Run halSynteny
   cmd=(
     halSynteny
-    --targetGenome "$reference"
-    --queryGenome "$query"
+    --targetGenome "$ref_label"
+    --queryGenome "$query_label"
     "$inHal"
     "$outPsl"
   )

@@ -29,9 +29,9 @@ Required input:
   minlen   minimum length to filter contigs out below
 
 Output:
-  └── $outdir
-      ├── $(basename "$out_md5")      expected md5 of FASTQs parsed ENA TSV
-      └── <ENA_ID>.fastq.gz         locally downloaded FASTQs
+  $outdir
+  ├── $(basename "$out_md5")      expected md5 of FASTQs parsed ENA TSV
+  └── <ENA_ID>.fastq.gz         locally downloaded FASTQs
 
 Requires:
  - R v4.6.0 (https://www.r-project.org/)"

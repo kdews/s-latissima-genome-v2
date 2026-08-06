@@ -302,18 +302,6 @@ comp_v2_idx <- idx %>%
   mutate(n = as.numeric(factor(ID, levels = unique(ID))),
          Type = case_when(row_number() <= 31 ~ "chromosome",
                           .default = "contig"))
-# Save tables of labeled v2 chromosome IDs for Minigraph-Cactus pangenome
-v2_contig_type <- comp_v2_idx %>%
-  ungroup() %>%
-  select(Label, ID, Type) %>%
-  filter(Type == "chromosome") %>%
-  mutate(Filename = paste0(Label, "-", Type, "_ids.txt"))
-for (contig_file in unique(v2_contig_type$Filename)) {
-  tmp_df <- v2_contig_type %>%
-    filter(Filename == contig_file) %>%
-    select(ID)
-  write_tsv(x = tmp_df, file = contig_file, col_names = F)
-}
 # Plot v2 assemblies showing chromosome & contig split (log10-scale)
 p_comp_v2 <- ggplot(comp_v2_idx, aes(x = n, y = Length)) +
   geom_vline(xintercept = 31, linetype = "dashed", alpha = 0.4) +

@@ -7,7 +7,7 @@
 
 # Script variables
 # Extract job name from script
-if [[ -z "${SLURM_JOB_NAME}" ]]
+if [[ -z "$SLURM_JOB_NAME" ]]
 then
   job_name="$(basename "$0")"
   job_name="${job_name%%.*}"
@@ -15,7 +15,8 @@ else
   job_name="$SLURM_JOB_NAME"
 fi
 date_str="$(date +"%m-%d-%y")" # filename date format
-outdir="${job_name}_${date_str}_$SLURM_JOB_ID" # output directory
+res_dir="${job_name}_results" # results directory for all jobs
+outdir="$res_dir/${date_str}_$SLURM_JOB_ID" # output directory
 js="$outdir/jobstore" # Toil jobstore
 workdir="$outdir/toil_workdir" # Toil working directory
 logdir="$outdir/slurm_logs" # slurm log directory
@@ -33,8 +34,7 @@ def_cores=2 # increase default cores from 1
 def_disk="20Gi" # increase default disk memory from 2Gi
 
 # Help message
-if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]
-then
+show_help () {
   echo "\
 Runs Progressive Cactus alignment. Requires as input a Cactus-formatted seqFile.
 
@@ -49,17 +49,30 @@ Required input:
                     nameN pathN
 
 Output:
-  ${job_name}_${date_str}_<job_id>/ # main Cactus output directory
-  ├── $(basename "$js")/            # Toil jobstore (left by unsuccessful run)
-  ├── $(basename "$workdir")/       # Toil working directory
-  └── $(basename "$logdir")/        # extra slurm logs from Cactus and Toil
+  $res_dir/
+  └── ${date_str}_<job_id>/        # main Cactus output directory
+      ├── $(basename "$js")/       # Toil jobstore (left by unsuccessful run)
+      ├── $(basename "$workdir")/  # Toil working directory
+      └── $(basename "$logdir")/   # extra slurm logs from Cactus and Toil
 
 Requires:
  - virtualenv (https://virtualenv.pypa.io/en/latest)
  - Toil (https://toil.readthedocs.io/en/latest)
  - Cactus (https://github.com/ComparativeGenomicsToolkit/cactus)"
+}
+# Catch help flag or missing argument(s)
+if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]
+then
+  show_help
   exit 0
+elif [[ "$#" -ne 1 ]]
+then
+  echo "Error: 1 positional argument expected."
+  echo
+  show_help
+  exit 1
 fi
+
 
 # Print date and time
 echo
@@ -104,19 +117,12 @@ echo
 # name2  path2
 # ...
 # nameN  pathN
-if [[ "$#" -eq 1 ]]
+seqFile="${1:-s-latissima-genome-v2/s_latissima_prog_align.txt}"
+if [[ -f "$seqFile" ]]
 then
-  # seqFile=s_latissima_prog_align.txt
-  seqFile="$1"
-  if [[ -f "$seqFile" ]]
-  then
-    echo "Using seqFile: $seqFile"
-  else
-    echo "Error: no seqFile found ($seqFile)."
-    exit 1
-  fi
+  echo "Using seqFile: $seqFile"
 else
-  echo "Error: 1 positional argument expected."
+  echo "Error: no seqFile found ($seqFile)."
   exit 1
 fi
 # Prefix output files by seqFile

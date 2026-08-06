@@ -35,20 +35,20 @@ path relationships across assemblies.
 Usage: sbatch $job_name.sbatch <seqFile> <cactus_dir>
 
 Output:
-  ${job_name}_results/
-      └── ${date_str}_<job_id>/
-          ├── graph.raw.og                  # ODGI graph converted from GFA
-          ├── graph.sorted.og               # path-guided sorted ODGI graph
-          ├── graph.stats.txt               # graph statistics summary
-          ├── graph.paths.txt               # list of graph paths/genomes
-          ├── graph.overview.compressed.png # compressed whole-pangenome overview
-          ├── graph.overview.paths.png      # whole-pangenome path visualization
-          └── <seqid>/                      # per-chromosome (ref) visualizations
-            ├── <seqid>.full.sorted.og
-            ├── <seqid>.full.stats.txt
-            ├── <seqid>.full.lay
-            ├── <seqid>.full.draw.png
-            └── <seqid>.full.viz.png
+  $res_dir/
+  └── ${date_str}_<job_id>/
+      ├── graph.raw.og                  # ODGI graph converted from GFA
+      ├── graph.sorted.og               # path-guided sorted ODGI graph
+      ├── graph.stats.txt               # graph statistics summary
+      ├── graph.paths.txt               # list of graph paths/genomes
+      ├── graph.overview.compressed.png # compressed whole-pangenome overview
+      ├── graph.overview.paths.png      # whole-pangenome path visualization
+      └── <seqid>/                      # per-chromosome (ref) visualizations
+          ├── <seqid>.full.sorted.og
+          ├── <seqid>.full.stats.txt
+          ├── <seqid>.full.lay
+          ├── <seqid>.full.draw.png
+          └── <seqid>.full.viz.png
   
 Requires: ODGI (https://github.com/pangenome/odgi)"
   exit 0
@@ -86,10 +86,8 @@ echo
 # Input
 if [[ "$#" -eq 2 ]]
 then
-  # seqFile="s_latissima_align.txt"
-  seqFile="$1"
-  # cactus_dir="cactus_pangenome_05-21-26_8926505"
-  cactus_dir="$2"
+  seqFile="${1:-s-latissima-genome-v2/s_latissima_align.txt}"
+  cactus_dir="${2:-cactus_pangenome_results/05-21-26_8926505}"
   if [[ -f "$seqFile" ]]
   then
     echo "Using seqFile: $seqFile"

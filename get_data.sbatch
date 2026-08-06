@@ -58,13 +58,11 @@ Supported read sources:
   sra         one or more comma-separated SRA run accessions
 
 Output:
-  .
-  ├── assemblies/             # directory containing all assemblies
-  │   ├── <label>.fa          # renamed assembly FASTA (uncompressed)
-  │   └── <label>.fa.fai      # FASTA index
-  └── reads/                  # directory containing all reads
-  │   └── <label>.fastq.gz    # renamed reads FASTQ (gzip-compressed)
-  └── <out_tsv>               # output TSV of local paths
+  assemblies/             # directory containing all assemblies
+  ├── <label>.fa          # renamed assembly FASTA (uncompressed)
+  └── <label>.fa.fai      # FASTA index
+  reads/                  # directory containing all reads
+  └── <label>.fastq.gz    # renamed reads FASTQ (gzip-compressed)
 
 Requires:
  - curl v8+ (https://curl.se)
@@ -114,7 +112,7 @@ fi
 nthrd="${SLURM_CPUS_PER_TASK:-1}"
 
 # Input
-in_tsv="${1:-genomes_metadata.tsv}"
+in_tsv="${1:-s-latissima-genome-v2/genomes_metadata.tsv}"
 [[ -r $in_tsv ]] || die "Cannot read input TSV: $in_tsv"
 
 # Output
