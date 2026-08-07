@@ -5,6 +5,10 @@ library(tidyverse)
 library(gridExtra)
 library(ggpubr)
 library(scales)
+if (require(showtext)) {
+  showtext_auto()
+  if (interactive()) showtext_opts(dpi = 100) else showtext_opts(dpi = 300)
+}
 
 ## Input
 if (interactive()) {
@@ -26,18 +30,23 @@ lbl_order <- c(
 )
 # Order for region factor
 rg_order <- c("US", "France", "Norway", "China", "Peru")
+# Cutoff (in bp) for contig length bar plots
+my_limit <- 1e6
 
 ## Output
 # Plot filenames
 vio_plot <- "scaffold_sizes_violin_log.png"
-bar_plot <- "scaffold_sizes_bar.png"
+bar_len_cut_plot <- paste0("scaffold_sizes_bar_cut_",
+                           number(my_limit, big.mark = ""), ".png")
+bar_n50_cut_plot <- "scaffold_sizes_bar_cut_n50.png"
 comp_v2_plot <- "comp_v2_length.png"
 comp_polish_plot <- "comp_polish_length.png"
 # Prepend output directory to file names (if it exists)
 outdir <- file.path(scripts_dir, "figures")
 if (dir.exists(outdir)) {
   vio_plot <- file.path(outdir, vio_plot)
-  bar_plot <- file.path(outdir, bar_plot)
+  bar_len_cut_plot <- file.path(outdir, bar_len_cut_plot)
+  bar_n50_cut_plot <- file.path(outdir, bar_n50_cut_plot)
   comp_v2_plot <- file.path(outdir, comp_v2_plot)
   comp_polish_plot <- file.path(outdir, comp_polish_plot)
 }
@@ -187,11 +196,11 @@ distPlot <- function(idx, limit = 1e6) {
     # Horizontal line at limit
     geom_hline(aes(yintercept = .data[[var_type]]), color = "red", lty = 2) +
     # Label limit
-    geom_text(data = sum_dist_idx, color = "red",
+    geom_text(data = sum_dist_idx, color = "red", size = 3,
               mapping = aes(x = x_pos, y = .data[[var_type]] * 4,
                             label = paste(round(.data[[var_type]]/1e6, 2),
                                           "Mb"))) +
-    # Log-scale barplot of scaffold and contig lengths
+    # Log-scale bar plot of scaffold and contig lengths
     geom_col(aes(col = Length >= .data[[var_type]],
                  fill = Length >= .data[[var_type]])) +
     # Set colors above and below cutoff
@@ -201,14 +210,20 @@ distPlot <- function(idx, limit = 1e6) {
     # Remove space to the left of the bars
     scale_x_continuous(expand = c(0, 0)) +
     # Convert length to log10 scale
-    scale_y_log10(labels = label_log()) +
+    scale_y_log10(name = "Length (bp)", labels = label_log()) +
     facet_wrap(~ Pretty_Label, scales = "free_x") +
-    labs(x = "", y = "Length (bp)") +
+    xlab(NULL) +
     theme_bw() +
-    theme(strip.text = element_text(face = "italic"), # italicize species
+    theme(strip.text = element_text(face = "italic", size = 8), # italicize species
           strip.background = element_blank(),
           # legend.direction = "vertical",
           legend.position = "top", legend.title.position = "left")
+}
+# Save plots and print information to log
+saveMyPlot <- function(fname, p, wd, ht, msg) {
+  cat("Saving", msg, "to:", fname, "\n")
+  ggsave(filename = fname, plot = p, width = wd, height = ht,
+         bg = "white", dpi = 300)
 }
 
 # Read in data
@@ -290,7 +305,7 @@ sum_idx <- sumDf(idx)
 
 # Plot assembly length distributions
 p_l <- violinPlot(idx, sum_idx, n50 = T)
-p_d <- distPlot(idx, 1e6)
+p_d <- distPlot(idx, my_limit)
 p_d_n50 <- distPlot(idx, "n50")
 
 # Compare all v2 assemblies by region 
@@ -322,31 +337,51 @@ comp_polish_idx <- idx %>%
          Version %in% c("v2", "v2.p")) %>%
   group_by(Label) %>%
   arrange(desc(Length), .by_group = T) %>%
-  mutate(n = as.numeric(factor(ID, levels = unique(ID))),
+  mutate(`Length (Mb)` = Length/1e6,
+         n = as.numeric(factor(ID, levels = unique(ID))),
          Type = case_when(row_number() <= 31 ~ "chromosomes",
                           .default = "contigs"))
+max_len <- comp_polish_idx %>%
+  ungroup() %>%
+  summarize(max_len = max(`Length (Mb)`), .by = "Type") %>%
+  pivot_wider(names_from = Type, values_from = max_len)
+# Define y-axis breaks with function
+my_breaks <- function(y) {
+  if (max(y) < max_len$chromosomes) {
+    seq(0, max_len$contigs + 1, 1) # contig breaks
+  } else {
+    seq(0, max_len$chromosomes, 5) # chromosome breaks
+  } 
+}
+# Plot polished vs. unpolished US v2
 p_comp_polish <- ggplot(comp_polish_idx,
-                        aes(x = n, y = Length)) +
+                        aes(x = n, y = `Length (Mb)`)) +
   geom_col(aes(fill = Version), position = "dodge") +
   scale_fill_discrete(palette = scales::pal_brewer(palette = "Paired")) +
-  scale_x_continuous(expand = c(0.01, 0.01), breaks = c(1:31, seq(35, 120, 5))) +
+  # Remove x-axis name and set breaks for chromosomes and contigs
+  scale_x_continuous(name = NULL, expand = c(0.01, 0.01),
+                     breaks = c(1:31, seq(30, max(comp_polish_idx$n) + 5, 5))) +
+  # Convert y-axis from bp to Mb
+  scale_y_continuous(breaks = my_breaks) +
   facet_wrap(~ Type, ncol = 1, scales = "free") +
-  labs(x = NULL, y = "Length (bp)",
-       title = expression("Impact of polishing on length (US " * 
-                            italic("S. latissima") * ")")) +
+  labs(title = expression("Impact of polishing on length (US " * 
+                            italic("S. latissima") * " v2)")) +
   theme_bw()
 
-# Save plots
-# Violin plot
-cat("Saving assembly violin plots to:", vio_plot, "\n")
-vio_width <- 9 * dim(sum_idx)[1]/5
-ggsave(filename = vio_plot, plot = p_l, bg = "white", width = vio_width, height = 7)
-cat("Saving contig length barplot plots to:", bar_plot, "\n")
-ggsave(filename = bar_plot, plot = p_d, bg = "white", width = 10, height = 6)
+## Save plots
+# Violin
+vio_width <- 9 * dim(sum_idx)[1]/5 # calculate width based on n assemblies
+saveMyPlot(fname = vio_plot, p = p_l, wd = vio_width, ht = 7,
+           msg = "assembly violin plots")
+# Bar plots
+saveMyPlot(fname = bar_len_cut_plot, p = p_d, wd = 10, ht = 6,
+           msg = paste0("contig length bar plots (cutoff = ",
+                        number(my_limit, big.mark = ","), " bp)"))
+saveMyPlot(fname = bar_n50_cut_plot, p = p_d_n50, wd = 10, ht = 6,
+           msg = "contig length bar plots (cutoff = n50)")
 # US vs. France v2 comparison
-cat("Saving US vs. France v2 comparison plot to:", comp_v2_plot, "\n")
-ggsave(filename = comp_v2_plot, plot = p_comp_v2, width = 7, height = 5)
+saveMyPlot(fname = comp_v2_plot, p = p_comp_v2, wd = 7, ht = 5,
+           msg = "US vs. France v2 comparison plot")
 # US polishing comparison
-cat("Saving US polishing comparison plot to:", comp_polish_plot, "\n")
-ggsave(filename = comp_polish_plot, plot = p_comp_polish, width = 10,
-       height = 10)
+saveMyPlot(fname = comp_polish_plot, p = p_comp_polish, wd = 10, ht = 10,
+           msg = "US v2 polishing comparison plot")
