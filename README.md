@@ -106,7 +106,7 @@ Assembly-length and scaffold-contiguity visualization with [`scaffold_eval.R`](s
 
 #### Results
 
-##### Comparisons of chromosome and contig lengths across all compared species, highlighting assembly statistics.
+##### Comparisons of chromosome and contig lengths across all compared species, highlighting assembly statistics
 
 Violin plot of length distribution per assembly
 ![alt text](figures/scaffold_sizes_violin_log.png)
