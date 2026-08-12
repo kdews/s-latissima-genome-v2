@@ -113,7 +113,7 @@ if [[ -f "${script_list[busco]}" ]]; then
   for i in "${!labels[@]}"; do
     label="${labels[i]}"
     pretty_label="${pretty_labels[i]}"
-    log="busco_logs/busco_$label.log" # per-assembly log
+    log="busco_logs/busco_${label}_%j.log" # per-assembly log
     assembly="assemblies/$label.fa"
     [[ -f "$assembly" ]] || { echo "Error: assembly ($assembly) not found."; exit 1; }
     echo "Assembly version: $label [$pretty_label]"
@@ -179,7 +179,7 @@ if [[ -f "${script_list[quast]}" ]]; then
     assembly="assemblies/$label.fa"
     [[ -f "$assembly" ]] \
       || { echo "Error: Assembly ($assembly) not found."; exit 1; }
-    log="quast_logs/quast_$label.log" # per-assembly log
+    log="quast_logs/quast_${label}_%j.log" # per-assembly log
     # Preserve first-seen ordering of clean labels
     clean_label="${label%%_v[0-9]*}"
     if [[ -z ${seen_clean_label[$clean_label]+x} ]]; then

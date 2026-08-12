@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH -J quast
 #SBATCH -o %x_logs/%x_%j.log
-#SBATCH -p gpu
+#SBATCH -p oneweek
 #SBATCH --time=18:00:00
-#SBATCH --mem=180g
+#SBATCH --mem=86g
 #SBATCH --cpus-per-task=12
 
 # Script variables
@@ -89,6 +89,7 @@ echo
 cmd=(
   quast
   --large # enable large eukaryotic genome settings
+  # --fragmented # reference genome is fragmented (e.g., a scaffold reference)
   --circos # make Circos plot
   # -s # split assembly scaffolds into contigs for analysis ("<label>_broken")
   -k # use k-mers to determine assembly completion (default k=101bp)
@@ -117,10 +118,16 @@ if [[ "$reads_opt" == reads ]]; then
     cmd+=(--pe1 "$pe1" --pe2 "$pe2")
   elif [[ -f "$long_pb" ]]; then
     echo "Using PacBio reads: $long_pb"
-    cmd+=(--pacbio "$long_pb")
+    cmd+=(
+      --upper-bound-assembly # est. theoretical upper-bound assembly from reads
+      --pacbio "$long_pb"
+    )
   elif [[ -f "$long_ont" ]]; then
     echo "Using Nanopore reads: $long_ont"
-    cmd+=(--nanopore "$long_ont")
+    cmd+=(
+      --upper-bound-assembly # est. theoretical upper-bound assembly from reads
+      --nanopore "$long_ont"
+    )
   fi
 fi
 # Append assembly path(s) to command
