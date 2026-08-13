@@ -177,6 +177,13 @@ if [[ -f "${script_list[quast]}" ]]; then
     label="${labels[n]}"
     pretty_label="${pretty_labels[n]}"
     assembly="assemblies/$label.fa"
+    # Set reference FASTA
+    if echo "$pretty_label" | grep -q latissima
+    then
+      cur_ref="$ref_chr"
+    else
+      cur_ref="$assembly" # use self as ref if not S. latissima
+    fi
     [[ -f "$assembly" ]] \
       || { echo "Error: Assembly ($assembly) not found."; exit 1; }
     log="quast_logs/quast_${label}_%j.log" # per-assembly log
@@ -197,53 +204,24 @@ if [[ -f "${script_list[quast]}" ]]; then
     pe2="reads/${clean_label}_2.fastq.gz"
     long_pb="reads/${clean_label}_pacbio.fastq.gz"
     long_ont="reads/${clean_label}_nanopore.fastq.gz"
-    # partition=main # default Slurm partition
     if [[ -f "$long_pb" || -f "$long_ont" || -f "$pe1" && -f "$pe2" ]]; then
       reads_opt=reads
-      # read_bytes=0
-      # for read_file in "$pe1" "$pe2" "$long_pb" "$long_ont"; do
-      #   [[ -f "$read_file" ]] \
-      #     && (( read_bytes += $(stat -c '%s' "$read_file") ))
-      # done
-      # read_gib=$(( (read_bytes + 1024**3 - 1) / 1024**3 ))
-      # if (( read_gib == 0 )); then
-      #   cpus=12
-      #   mem="15g"
-      #   walltime="05:00:00"
-      # elif (( read_gib <= 50 )); then
-      #   cpus=24
-      #   mem="64g"
-      #   walltime="1-00:00:00"
-      # elif (( read_gib <= 125 )); then
-      #   partition=largemem
-      #   cpus=24
-      #   mem="96g"
-      #   walltime="2-00:00:00"
-      # elif (( read_gib <= 250 )); then
-      #   partition=largemem
-      #   cpus=32
-      #   mem="128g"
-      #   walltime="3-00:00:00"
-      # else
-      #   partition=largemem
-      #   cpus=32
-      #   mem="192g"
-      #   walltime="4-00:00:00"
-      # fi
+      partition=gpu
+      mem=100g
     else
       reads_opt=no_reads
+      partition=main
+      mem=45g # lower memory requirement for single assembly without reads
     fi
     echo "Assembly version: $label [$pretty_label]"
     submission=(
       sbatch
       -o "$log"
-      # -p "$partition"
-      # --cpus-per-task="$cpus"
-      # --mem="$mem"
-      # --time="$walltime"
+      -p "$partition"
+      --mem="$mem"
       "$script"
       "$label"
-      "$ref_chr"
+      "$cur_ref"
       "$reads_opt"
       "$assembly"
     )
@@ -265,14 +243,14 @@ if [[ -f "${script_list[quast]}" ]]; then
       # Use latest assembly version as reference
       last_idx="$(( ${#assemblies[@]} - 1 ))"
       ref="${assemblies[last_idx]}"
-      # assemblies=("${assemblies[@]:0:$last_idx}")
     fi
     echo "Assembly: $clean_label (reference for QUAST: $ref)"
-    log="quast_logs/quast_$clean_label.log"
+    log="quast_logs/quast_${clean_label}_%j.log"
     submission=(
       sbatch
       -o "$log"
-      -p largemem # use largemem partition
+      -p oneweek
+      --mem=60g # lower memory requirement without reads
       "$script"
       "$clean_label"
       "$ref"

@@ -2,7 +2,7 @@
 #SBATCH -J quast
 #SBATCH -o %x_logs/%x_%j.log
 #SBATCH -p oneweek
-#SBATCH --time=18:00:00
+#SBATCH --time=2-0
 #SBATCH --mem=86g
 #SBATCH --cpus-per-task=12
 
@@ -73,15 +73,31 @@ assemblies=("${@:4}") # uncompressed assembly FASTA(s)
 nthrd="${SLURM_CPUS_PER_TASK:-1}"
 # Output directory name
 out="quast_results/$label"
-# Log details
+[[ -d "$out" ]] && { echo "Error: Delete existing output dir: $out"; exit 1; }
+# Log details and check input FASTAs exist
 echo
+echo "Reference FASTA: $ref"
+[[ -f "$ref" ]] || { echo "Error: Reference FASTA not found."; exit 1; }
 echo "Assembly label: $label"
 echo "Assembly FASTA(s): ${assemblies[*]}"
-# Check input FASTA(s) exist
 for assembly in "${assemblies[@]}"; do
-  [[ -f "$assembly" ]] || { echo "Error: Assembly FASTA not found."; exit 1; }
+  if [[ ! -f "$assembly" ]]; then
+    echo "Error: Assembly FASTA ($assembly) not found."
+    exit 1
+  fi
 done
-[[ -f "$ref" ]] || { echo "Error: Reference FASTA not found."; exit 1; }
+# Set assembly labels flag for QUAST
+if [[ "${#assemblies[@]}" -eq 1 ]]; then
+  label_opt="$label" # single assembly: label matches output label
+else
+  labels=()
+  # multiple assemblies: parse labels from FASTA filenames
+  for assembly in "${assemblies[@]}"; do
+    labels+=("$(basename "$assembly" .fa)")
+  done
+  label_opt=$(IFS=,; echo "${labels[*]}") # separate labels by commas
+  label_opt="${label_opt//,/, }" # add space after commas
+fi
 echo
 
 # QUAST command
@@ -89,7 +105,7 @@ echo
 cmd=(
   quast
   --large # enable large eukaryotic genome settings
-  # --fragmented # reference genome is fragmented (e.g., a scaffold reference)
+  --fragmented # reference genome is fragmented (e.g., a scaffold reference)
   --circos # make Circos plot
   # -s # split assembly scaffolds into contigs for analysis ("<label>_broken")
   -k # use k-mers to determine assembly completion (default k=101bp)
@@ -99,6 +115,7 @@ cmd=(
   # -g "$gff" # feature file
   --threads "$nthrd"
   -r "$ref" # reference genome
+  -l "$label_opt" # assembly labels, formatted: "label1, label2,..."
   -o "$out"
 )
 
@@ -132,21 +149,6 @@ if [[ "$reads_opt" == reads ]]; then
 fi
 # Append assembly path(s) to command
 cmd+=("${assemblies[@]}")
-
-# # Set reference for QUAST
-# last_idx="$(( ${#assemblies[@]} - 1 ))"
-# if [[ "${#assemblies[@]}" -eq 1 ]]; then
-#   # Use default reference for single assemblies
-#   echo "Reference: $def_ref"
-#   cmd+=(-r "$def_ref")
-#   cmd+=("${assemblies[0]}")
-# else
-#   # Use latest version as reference for multiple assembly versions
-#   ref="${assemblies[last_idx]}"
-#   echo "Reference: $ref"
-#   cmd+=(-r "$ref")
-#   cmd+=("${assemblies[@]:0:$last_idx}")
-# fi
 
 # Run QUAST
 echo "${cmd[*]}"
