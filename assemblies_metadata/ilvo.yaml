@@ -1,0 +1,31 @@
+label: ilvo
+pretty_label: "Saccharina latissima (Norway; Bråtelund et al. 2024)"
+taxonomy:
+  species: Saccharina latissima
+sample:
+  id: WGS_kelp_146
+  region: Norway
+  sex: UV
+  ploidy: 2
+assembly:
+  version: Bråtelund 2024
+  level: contig
+  current_representative: true
+  source:
+    location: remote
+    method: ncbi
+    locator: GCA_034768055.1
+    selector: null
+  annotation_gff: null
+  proteins_fasta: null
+reads:
+  source:
+    location: remote
+    method: sra
+    locator: SRR26857257
+  platform: illumina
+relationships:
+  assembly_series: ilvo
+  previous_version: null
+analysis:
+  groups: [s_latissima, Norway, ilvo]

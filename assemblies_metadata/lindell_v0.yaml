@@ -1,0 +1,31 @@
+label: lindell_v0
+pretty_label: "Saccharina latissima (US v0)"
+taxonomy:
+  species: Saccharina latissima
+sample:
+  id: SL-CT1-FG3
+  region: US
+  sex: U
+  ploidy: 1
+assembly:
+  version: v0
+  level: contig
+  current_representative: false
+  source:
+    location: local
+    method: file
+    locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/lindell_v0/SugarkelpHifiasm.raconPolished.fasta.gz
+    selector: null
+  annotation_gff: null
+  proteins_fasta: null
+reads:
+  source:
+    location: local
+    method: glob
+    locator: /project2/noujdine_61/kdeweese/latissima/longreads/ccs/*.fastq.gz
+  platform: pacbio
+relationships:
+  assembly_series: lindell
+  previous_version: null
+analysis:
+  groups: [s_latissima, US, lindell]

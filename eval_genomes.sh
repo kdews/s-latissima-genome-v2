@@ -2,7 +2,7 @@
 #SBATCH -J eval_genomes
 #SBATCH -o %x_logs/%x_%j.log
 #SBATCH --time=05:00:00
-#SBATCH --mem=3gb
+#SBATCH --mem=3g
 
 # Script variables
 # Extract job name from script
@@ -226,7 +226,7 @@ if [[ -f "${script_list[quast]}" ]]; then
       "$assembly"
     )
     echo "${submission[*]}"
-    "${submission[@]}"
+    # "${submission[@]}"
     echo
   done
   echo "Submitting per-assembly QUAST jobs..."
@@ -250,7 +250,7 @@ if [[ -f "${script_list[quast]}" ]]; then
       sbatch
       -o "$log"
       -p oneweek
-      --mem=60g # lower memory requirement without reads
+      --mem=85g # lower memory requirement without reads
       "$script"
       "$clean_label"
       "$ref"
@@ -258,7 +258,7 @@ if [[ -f "${script_list[quast]}" ]]; then
       "${assemblies[@]}"
     )
     echo "${submission[*]}"
-    "${submission[@]}"
+    # "${submission[@]}"
     echo
   done
 fi

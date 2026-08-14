@@ -1,0 +1,33 @@
+label: ectocarpus_liu2024
+pretty_label: "Ectocarpus sp. (Peru; Liu et al. 2024)"
+taxonomy:
+  species: Ectocarpus sp.
+sample:
+  id: Ec32
+  region: Peru
+  sex: UV
+  ploidy: 1
+assembly:
+  version: Liu 2024
+  level: chromosome
+  current_representative: true
+  source:
+    location: remote
+    method: dataverse
+    locator: 10.17617/3.NQDSLW
+    selector: null
+  annotation_gff: null
+  proteins_fasta: null
+reads:
+  source:
+    location: remote
+    method: sra
+    locator:
+      - SRR28880056
+      - SRR28831804
+  platform: nanopore
+relationships:
+  assembly_series: ectocarpus_liu2024
+  previous_version: null
+analysis:
+  groups: [outgroup, Ectocarpus, Peru]

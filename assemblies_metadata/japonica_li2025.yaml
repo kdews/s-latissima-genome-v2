@@ -1,0 +1,31 @@
+label: japonica_li2025
+pretty_label: "Saccharina japonica (China; Li et al. 2025)"
+taxonomy:
+  species: Saccharina japonica
+sample:
+  id: HJS-C
+  region: China
+  sex: U
+  ploidy: 2
+assembly:
+  version: Li 2025
+  level: chromosome
+  current_representative: true
+  source:
+    location: remote
+    method: figshare
+    locator: "27569472"
+    selector: null
+  annotation_gff: null
+  proteins_fasta: null
+reads:
+  source:
+    location: remote
+    method: sra
+    locator: SRR31210069
+  platform: pacbio
+relationships:
+  assembly_series: japonica_li2025
+  previous_version: null
+analysis:
+  groups: [related_species, Saccharina, China]
