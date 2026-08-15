@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH -J eval_genomes
-#SBATCH -o %x_logs/%x_%j.log
+#SBATCH -o %x.log
+#SBATCH --open-mode=append
 #SBATCH --time=05:00:00
 #SBATCH --mem=3g
 
@@ -45,15 +46,9 @@ elif (( $# < 2 )); then
   exit 1
 fi
 
-# Print Slurm job information
-[[ -n "$SLURM_JOB_ID" ]] && echo "\
-==========================================
-SLURM_JOB_ID = $SLURM_JOB_ID
-SLURM_JOB_NODELIST = $SLURM_JOB_NODELIST
-TMPDIR = $TMPDIR
-=========================================="
-
 # Print date and time
+echo
+echo "=========================================="
 date_fmt="%-I:%M:%S %p (%a %d %b %Y)" # date format
 date +"$date_fmt"
 echo
@@ -82,6 +77,7 @@ for script_path in "${@:2}"; do
   script_list["$script_name"]="$script_path"
 done
 echo "Running ${#script_list[@]} scripts: ${script_list[*]}"
+echo
 
 # Run BUSCO results comparison visualization script
 if [[ -f "${script_list[busco_compare]}" ]]; then
@@ -103,7 +99,6 @@ if [[ -f "${script_list[busco_compare]}" ]]; then
   date +"$date_fmt"
   exit 0
 fi
-echo
 
 # Run BUSCO jobs
 if [[ -f "${script_list[busco]}" ]]; then
@@ -128,8 +123,8 @@ if [[ -f "${script_list[busco]}" ]]; then
     "${submission[@]}"
     echo
   done
+  echo
 fi
-echo
 
 # Run QUAST jobs
 # Declare associative arrays to store grouped labels
@@ -229,12 +224,14 @@ if [[ -f "${script_list[quast]}" ]]; then
     # "${submission[@]}"
     echo
   done
-  echo "Submitting per-assembly QUAST jobs..."
   clean_labels+=(latissima)
-  for clean_label in "${clean_labels[@]}"; do
+  first_idx=0
+  for i in "${!clean_labels[@]}"; do
+    clean_label="${clean_labels[$i]}"
     read -r -a assemblies <<< "${assemblies_by_clean_label[$clean_label]}"
-    # Skip groups containing only one assembly
-    (( ${#assemblies[@]} > 1 )) || continue
+    (( ${#assemblies[@]} > 1 )) || continue # skip groups of only one assembly
+    (( first_idx += 1 )) # increment first index
+    [[ "$first_idx" -eq 1 ]] && echo "Submitting per-assembly QUAST jobs..."
     if [[ "$clean_label" == latissima ]]; then
       echo "Running QUAST on all Saccharina latissima assemblies"
       # Use chromosomal reference for all S. latissima assemblies
@@ -261,8 +258,8 @@ if [[ -f "${script_list[quast]}" ]]; then
     # "${submission[@]}"
     echo
   done
+  echo
 fi
-echo
 
 # Print date and time
 date_fmt="%-I:%M:%S %p (%a %d %b %Y)" # date format

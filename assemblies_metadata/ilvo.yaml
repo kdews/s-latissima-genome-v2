@@ -1,5 +1,5 @@
 label: ilvo
-pretty_label: "Saccharina latissima (Norway; Bråtelund et al. 2024)"
+pretty_label: "Saccharina latissima (Norway; Bratelund et al. 2024)"
 taxonomy:
   species: Saccharina latissima
 sample:
@@ -8,7 +8,7 @@ sample:
   sex: UV
   ploidy: 2
 assembly:
-  version: Bråtelund 2024
+  version: Bratelund 2024
   level: contig
   current_representative: true
   source:

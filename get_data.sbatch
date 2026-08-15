@@ -462,7 +462,7 @@ do
 
   # Strip version from label (same reads for all versions)
   clean_label="${label%%_v[0-9]*}"
-  # Skip reads download if single/paired-end read FASTQ(s) exist
+  # Skip reads download if read FASTQ(s) exist in reads/
   if [[ -f "reads/${clean_label}_$reads_type.fastq.gz" || \
     -f "reads/${clean_label}_1.fastq.gz" && -f "reads/${clean_label}_2.fastq.gz" ]]
   then

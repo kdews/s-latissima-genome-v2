@@ -32,7 +32,8 @@ Generates plot(s) with conda-installed BUSCO generate_plot.py.
 Usage: sbatch $job_name.sbatch <in_tsv>
 
 Requires:
- - BUSCO (https://busco.ezlab.org)"
+ - BUSCO (https://busco.ezlab.org)
+ - R v6+ (https://www.r-project.org)"
 }
 # Catch help flag
 [[ $1 == "-h" || $1 == "--help" ]] && { show_help; exit 0; }
@@ -124,7 +125,7 @@ do
   # Load modules for Rscript
   # module load ver/2506 gcc/14.3.0 r/4.5.2
   module load r/4.6.0
-  cmd=("Rscript" "$rscript" "$wd" "$in_tsv" "$scripts_dir")
+  cmd=(Rscript "$rscript" "$wd" "$in_tsv" "$scripts_dir")
   echo "${cmd[*]}"
   "${cmd[@]}"
   # Unload modules
@@ -133,5 +134,4 @@ done
 
 # Print date and time
 echo
-date_fmt="%-I:%M:%S %p (%a %d %b %Y)" # date format
 date +"$date_fmt"

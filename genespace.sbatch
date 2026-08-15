@@ -54,6 +54,7 @@ then
   exit 1
 fi
 
+# Catch errors in pipes
 set -o pipefail
 
 # Print Slurm job information
