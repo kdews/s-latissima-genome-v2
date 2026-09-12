@@ -18,9 +18,9 @@ fi
 # Help message
 show_help () {
   echo "\
-Runs QUAST on a given assembly 
+Runs QUAST on a given assembly.
 
-Usage: sbatch $job_name.sbatch <assembly.fasta> <label>
+Usage: sbatch $job_name.sbatch <label> <reference> <reads_opt> <assembly.fasta(s)>
 
 Requires: 
  - QUAST (https://quast.sourceforge.net)"
