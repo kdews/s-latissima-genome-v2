@@ -2,9 +2,9 @@
 #SBATCH -J scaffold_eval
 #SBATCH -o %x_logs/%x_%j.log
 #SBATCH -p main
+#SBATCH --time=01:00:00
 #SBATCH --mem=8g
 #SBATCH --cpus-per-task=8
-#SBATCH --time=01:00:00
 
 # Script variables
 # Extract job name from script

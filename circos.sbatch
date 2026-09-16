@@ -66,8 +66,6 @@ circos --version || exit 1
 # Define variables
 # label=corteva_v2
 label="$1" # assembly label
-# Multithread support
-nthrd="${SLURM_CPUS_PER_TASK:-1}"
 # Input directory name
 in="quast_results/$label/circos"
 # Output directory name
