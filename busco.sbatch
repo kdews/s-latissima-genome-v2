@@ -16,6 +16,7 @@ then
 else
   job_name="$SLURM_JOB_NAME"
 fi
+outdir="${job_name}_results" # main output directory
 
 echo
 
@@ -28,7 +29,7 @@ Eukaryota and Stramenopiles lineage ortholog databases (ODBs).
 Usage: sbatch $job_name.sbatch <assembly.fasta> <label>
 
 Output:
-  busco_results/
+  $outdir/
   ├── eukaryota_odb<latest>/
   |   └── <label>/
   └── stramenopiles_odb<latest>/
@@ -146,7 +147,7 @@ cmd=(
   -m "$mode"
   -i "$assembly"
   -l {} # lineage (replaced by input from parallel)
-  --out_path "${job_name}_results/{}"
+  --out_path "$outdir/{}"
   -o "$label"
   :::
   "${odbs[@]}"

@@ -14,6 +14,7 @@ if [[ -z "$SLURM_JOB_NAME" ]]; then
 else
   job_name="$SLURM_JOB_NAME"
 fi
+outdir="${job_name}_results" # main output directory
 
 # Help message
 show_help () {
@@ -21,6 +22,25 @@ show_help () {
 Runs QUAST on a given assembly.
 
 Usage: sbatch $job_name.sbatch <label> <reference> <reads_opt> <assembly.fasta(s)>
+
+Output:
+  $outdir/
+  └── <label>/
+      ├── aligned_stats/           # (if reads provided)
+      ├── basic_stats/
+      ├── circos/
+      |   ├── data/                # contains Circos conf files
+      |   └── legend.txt           # labels legend of Circos plot
+      ├── contigs_reports/
+      ├── genome_stats/
+      ├── icarus.html
+      ├── icarus_viewers/
+      ├── k_mer_stats/
+      ├── predicted_genes/
+      ├── quast.log                # detailed QUAST run logging
+      ├── reads_stats/             # (if reads provided)
+      ├── report.*                 # full QUAST report files
+      └── upper_bound_assembly/
 
 Requires: 
  - QUAST (https://quast.sourceforge.net)"
@@ -72,7 +92,7 @@ assemblies=("${@:4}") # uncompressed assembly FASTA(s)
 # Multithread support
 nthrd="${SLURM_CPUS_PER_TASK:-1}"
 # Output directory name
-out="quast_results/$label"
+out="$outdir/$label"
 [[ -d "$out" ]] && { echo "Error: Delete existing output dir: $out"; exit 1; }
 # Log details and check input FASTAs exist
 echo
