@@ -145,7 +145,7 @@ return @file}
 sub process_command_line{
 $mode = ''; $contig_prefix = ''; $contig_full_name = ''; $trace_prefix = ''; $trace_full_name = ''; $gen_rep_full_name = ''; $ctg_rep_full_name = '';
 $trace_raw_vector_name = ''; $trace_filt_vector_name = ''; $trace_fasta_name = ''; $kmer_size="not_set"; $male_trace_full_name="not_used"; $male_trace_prefix=""; $save_memory="no";
-if (@ARGV == 0){usage_v_8("dummy"); die}
+if (@ARGV == 0){usage_v_11("dummy"); die}
 $num_arg = @ARGV;
 for ($i = 0 ; $i < $num_arg ; $i++){
 	#print "\n\n num_arg: $num_arg     command argument: @ARGV    \nargument number $i  $ARGV[$i]\n\n";	
@@ -168,13 +168,13 @@ for ($i = 0 ; $i < $num_arg ; $i++){
 	};
 #print "mode: $mode   contig_prefix: $contig_prefix  contig_full_name: $contig_full_name trace_prefix: $trace_prefix trace_full_name: $trace_full_name gen_rep_full_name: $gen_rep_full_name ctg_rep_full_name: $ctg_rep_full_name hash_full_name: $hash_full_name cut_off: $cut_off\n\n";
 if ($mode eq "contig"){
-	if ( ($contig_prefix eq "") || ($trace_prefix ne "") || ($gen_rep_full_name ne "")  ){usage_v_8("dummy"); die "mode $mode is incompatible with choosen files. Check usage above\n"}
+	if ( ($contig_prefix eq "") || ($trace_prefix ne "") || ($gen_rep_full_name ne "")  ){usage_v_11("dummy"); die "mode $mode is incompatible with choosen files. Check usage above\n"}
 	}
 if ($mode eq "trace"){
-	if ( ($contig_prefix ne "") || ($trace_prefix eq "") || ($gen_rep_full_name ne "")  ){usage_v_8("dummy"); die "mode $mode is incompatible with choosen files. Check usage above\n"}
+	if ( ($contig_prefix ne "") || ($trace_prefix eq "") || ($gen_rep_full_name ne "")  ){usage_v_11("dummy"); die "mode $mode is incompatible with choosen files. Check usage above\n"}
 	}
 if ($mode eq "final_run"){
-	if ( ($contig_prefix eq "") || ($trace_prefix eq "") || ($gen_rep_full_name eq "")  ){usage_v_8("dummy"); die "mode $mode is incompatible with choosen files. Check usage above\n"}
+	if ( ($contig_prefix eq "") || ($trace_prefix eq "") || ($gen_rep_full_name eq "")  ){usage_v_11("dummy"); die "mode $mode is incompatible with choosen files. Check usage above\n"}
 	}
 
 return}

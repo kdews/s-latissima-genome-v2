@@ -48,6 +48,8 @@ quer_id='roscoff_v2'
 pangenome_dir='cactus_pangenome_results/01-28-26_6039802'
 
 # Input data
+# Generate genome metadata TSV from YAMLs in <scripts_dir>
+sbatch "$scripts_dir/yaml_to_metadata.sbatch"
 # Download assembly FASTAs and sequencing reads and name by assembly labels
 sbatch "$scripts_dir/get_data.sbatch" "$scripts_dir/$in_tsv"
 
