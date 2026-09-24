@@ -34,7 +34,8 @@ Usage: sbatch $job_name.sbatch
 Input: 
   $yaml_dir/             # input directory containing genome metadata YAMLs
   ├── <label1>.yaml
-  └── <label2>.yaml 
+  ...
+  └── <labeln>.yaml 
 
 Output: $out_tsv
 

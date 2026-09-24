@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH -J sdr_id
 #SBATCH -o %x_logs/%x_%j.log
-#SBATCH -p largemem
-#SBATCH --time=1-0
-#SBATCH --mem=100g
+#SBATCH -p oneweek
+#SBATCH --time=7-0
+#SBATCH --mem=55g
 #SBATCH --cpus-per-task=16
 
 # Script variables
@@ -24,6 +24,8 @@ if [[ -d "$scripts_dir" ]]; then
   ygs_pl="$scripts_dir/$ygs_pl"
 fi
 ygs_pl="$(realpath -e "$ygs_pl")"
+window=500000 # window size = 500 kb
+win_str="$((window / 1000))kb" # get string from window size
 k=15 # k-mer size = 15
 target_cov=60 # target coverage with reads = 60x
 outdir="${job_name}_results" # main output directory
@@ -46,8 +48,9 @@ check_output () {
 show_help () {
   echo "\
 Runs k-mer-based SDR identification from Barrera-Redondo et al. (2025) and 
-Carvalho and Clark (2013) using k=$k. Input genome and reads must be from
-opposite sexes.
+Carvalho and Clark (2013) using k=$k. Reads must be from opposite sex (os)
+with respect to the assembly, with a set of same sex (ss) reads used to
+validate assembly k-mers.
 
 Usage: sbatch $job_name.sbatch <asm_id> <genome.fasta(.gz)>
 
@@ -55,8 +58,29 @@ Input:
   <asm_id>                assembly sample ID
   <genome.fasta(.gz)>     genome assembly FASTA
 
+Output:
+  ${job_name}_results/
+  ├── <genome>_$win_str.contig_result  # log for YGS contig mode
+  ├── <genome>_$win_str.ctg_rep.gz     # YGS bit-array of genomic repeat ${k}-mers found in > 1 contig
+  ├── <genome>_$win_str.fasta.gz       # genome FASTA split into $win_str sliding windows
+  ├── <genome>_$win_str.gen_rep.gz     # YGS bit-array of genomic repeat ${k}-mers
+  ├── <genome>_$win_str_os_reads_k${k}_ss_reads_k${k}.final_result
+  ├── os_ids_table.tsv             # table of sample IDs and metadata (os)
+  ├── os_reads.txt                 # list of read file paths (os)
+  ├── os_reads_k$k.fasta.gz        # ${k}-mers extracted into FASTA (os)
+  ├── os_reads_k$k.jf              # ${k}-mer Jellyfish binary hash (os)
+  ├── os_reads_k$k.trace.gz        # YGS ${k}-mer bit-array (ss)
+  ├── os_reads_k$k.trace_result    # log for YGS trace mode (os)
+  ├── ss_ids_table.tsv             # table of sample IDs and metadata (ss)
+  ├── ss_reads.txt                 # list of same sex read file paths (ss)
+  ├── ss_reads_k$k.fasta.gz        # ${k}-mers extracted into FASTA (ss)
+  ├── ss_reads_k$k.jf              # ${k}-mer Jellyfish binary hash (ss)
+  ├── ss_reads_k$k.trace.gz        # YGS ${k}-mer bit-array (ss)
+  └── ss_reads_k$k.trace_result    # log for YGS trace mode (ss)
+
 Requires:
  - seqkit v2.3.1+ (https://bioinf.shenwei.me/seqkit/)
+ - R v6+ (https://www.r-project.org)
  - Jellyfish v2.3.1+ (https://github.com/gmarcais/jellyfish)
  - pigz v2.8+ (https://zlib.net/pigz/)
  - Perl v5.23.1 (https://www.perl.org/)"
@@ -111,7 +135,7 @@ genome="${2:-"assemblies/corteva_v2.fa"}" # genome FASTA of one sex (e.g., femal
 mkdir -p "$outdir" # create output directory
 genome_basename="$(basename "$genome")" # genome filename basename
 genome_base="${genome_basename%%.fa*}" # genome filename base
-genome_windows="${genome_base}_500kb.fasta.gz" # genome split into windows
+genome_windows="${genome_base}_${win_str}.fasta.gz" # genome split into windows
 os="os_reads_k$k" # basename for opposite sex outputs
 os_jf="$os.jf" # opposite sex k-mer counts
 os_jfa="$os.fasta.gz" # opposite sex k-mer FASTA (compressed)
@@ -122,23 +146,23 @@ ss_jf="$ss.jf" # same sex k-mer counts
 ss_jfa="$ss.fasta.gz" # same sex k-mer FASTA (compressed)
 ss_trc="$ss.trace.gz" # same sex reads k-mer trace
 ss_trc_log="$ss.trace_result" # log for same sex trace run
-ctg="${genome_base}_500kb.gen_rep.gz" # genomic repeat k-mers
-ctg_log="${genome_base}_500kb.contig_result" # log for contig run
-out_final="${genome_base}_500kb_${os}_${ss}.final_result" # final run output
+ctg="${genome_base}_${win_str}.gen_rep.gz" # genomic repeat k-mers
+ctg_log="${genome_base}_${win_str}.contig_result" # log for contig run
+out_final="${genome_base}_${win_str}_${os}_${ss}.final_result" # final run output
 
 echo "Step 1: Slice genome into windows for YGS (Barrera-Redondo et al. 2025, p. 2138)"
 # Load seqkit env
 conda activate seqkit
 seqkit --help > /dev/null 2>&1 || exit 1
 echo "seqkit $(seqkit --help | grep "^Version" || exit 1)"
-# Section genome FASTA into 500-kb windows
+# Section genome FASTA into non-overlapping windows (default = 500kb)
 seq_cmd=(
   seqkit sliding
   -j "$nthrd" # threads
   -t dna # sequence type
   --greedy # don't toss end sequences shorter than window size
-  -s 500000 # 500-kb step size
-  -W 500000 # 500-kb window size
+  -s "$window" # step size
+  -W "$window" # window size
   -o "$outdir/$genome_windows" # output binned FASTA
   "$genome" # input genome FASTA
 )
@@ -256,10 +280,10 @@ perl -MBit::Vector -MCarp::Clan -MPerlIO::gzip \
 cd "$outdir" || { echo "Erorr: Output directory ($outdir) not found."; exit 1; }
 echo "YGS output will be in: $outdir"
 
-# Produce k-mers bit-array from opposite sex reads, filtered by quality and frequency
+# Produce bit-array from opposite sex k-mers, filtered by quality and frequency
 echo "Producing bit-array from..."
 echo
-echo "1. Opposite sex Illumina reads (w.r.t. assembly sample)"
+echo "1. ${k}-mers of opposite sex reads (w.r.t. assembly sample)"
 if ! [[ -f "$os_trc" ]]; then # skip if output exists
   set -x
   perl "$ygs_pl" kmer_size="$k" mode=trace trace="$os_jfa"
@@ -270,8 +294,8 @@ echo "Log file: $os_trc_log"
 grep -v '^$' "$os_trc_log" | sed 's/^/  /'
 echo
 
-# Produce validating bit-array from same sex reads, filtered by quality and frequency
-echo "2. Same sex Illumina reads (w.r.t. assembly sample)"
+# Produce validating bit-array from same sex k-mers, filtered by quality and frequency
+echo "2. ${k}-mers of same sex reads (w.r.t. assembly sample)"
 if ! [[ -f "$ss_trc" ]]; then # skip if output exists
   set -x
   perl "$ygs_pl" kmer_size="$k" mode=trace trace="$ss_jfa"

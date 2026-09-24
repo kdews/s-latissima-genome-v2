@@ -113,11 +113,11 @@ nthrd="${SLURM_CPUS_PER_TASK:-1}"
 
 # Input
 in_tsv="${1:-s-latissima-genome-v2/genomes_metadata.tsv}"
-[[ -r $in_tsv ]] || die "Cannot read input TSV: $in_tsv"
+[[ -r $in_tsv ]] || { echo "Cannot read input TSV: $in_tsv"; exit 1; }
 
 # Output
 work_dir="${job_name}_tmp" # temporary working directory
-mkdir -p "$work_dir" assemblies reads # create output directories
+mkdir -p "$work_dir" assemblies reads # create temp dir
 parsed="$work_dir/parsed.records"
 
 # Test required packages
@@ -451,13 +451,19 @@ do
   [[ -z "${extra:-}" ]] || die "$label: too many TSV columns"
   echo
   log "Starting log for $label [$pretty_label]"
-  # Fetch genome assemblies
-  if [[ -n "$genome_source" || -n "$genome_method" || -n "$genome_locator" ]]
+  # Skip assembly download if FASTA exists in assemblies/
+  if [[ -f "assemblies/$label.fa" ]]
   then
-    log "Getting genome for $label..."
-    [[ -n "$genome_source" && -n "$genome_method" && -n "$genome_locator" ]] \
-      || die "$label: incomplete genome fields"
-    # get_genome "$label" "$genome_source" "$genome_method" "$genome_locator" "$genome_selector"
+    log "Already retrieved assembly for $label. Skipping..."
+  else
+    # Fetch genome assemblies
+    if [[ -n "$genome_source" || -n "$genome_method" || -n "$genome_locator" ]]
+    then
+      log "Getting genome for $label..."
+      [[ -n "$genome_source" && -n "$genome_method" && -n "$genome_locator" ]] \
+        || die "$label: incomplete genome fields"
+      get_genome "$label" "$genome_source" "$genome_method" "$genome_locator" "$genome_selector"
+    fi
   fi
 
   # Strip version from label (same reads for all versions)
@@ -470,12 +476,11 @@ do
   else
     # Fetch assembly reads
     if [[ -n "$reads_source" || -n "$reads_method" || -n "$reads_type" \
-      || -n "$reads_locator" ]]
-    then
+      || -n "$reads_locator" ]]; then
       log "Getting $reads_type reads for $clean_label..."
       [[ -n "$reads_source" && -n "$reads_method" && -n "$reads_type" \
         && -n "$reads_locator" ]] || die "$label: incomplete read fields"
-      # get_reads "$clean_label" "$reads_source" "$reads_method" "$reads_type" "$reads_locator"
+      get_reads "$clean_label" "$reads_source" "$reads_method" "$reads_type" "$reads_locator"
     fi
   fi
 done < "$parsed"

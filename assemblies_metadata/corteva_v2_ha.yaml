@@ -1,5 +1,5 @@
-label: corteva_v2
-pretty_label: "Saccharina latissima (US v2)"
+label: corteva_v2_ha
+pretty_label: "Saccharina latissima (US v2 HA)"
 taxonomy:
   species: Saccharina latissima
 sample:
@@ -8,13 +8,13 @@ sample:
   sex: U
   ploidy: 1
 assembly:
-  version: v2
+  version: v2_ha
   level: chromosome
-  current_representative: false
+  current_representative: true
   source:
     location: local
     method: file
-    locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_Genome_Polished_111925.fasta
+    locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Saccharina_latissima_var_SL-CT1-FG3.V2.PRELIM.fasta.gz
     selector: null
   annotation_gff: null
   proteins_fasta: null
@@ -26,6 +26,6 @@ reads:
   platform: nanopore
 relationships:
   assembly_series: corteva
-  previous_version: corteva_v1
+  previous_version: corteva_v2_polished
 analysis:
   groups: [s_latissima, US, corteva]
