@@ -3,7 +3,7 @@
 #SBATCH -o %x_logs/%x_%j.log
 #SBATCH -p oneweek
 #SBATCH --time=7-0
-#SBATCH --mem=55g
+#SBATCH --mem=60g
 #SBATCH --cpus-per-task=16
 
 # Script variables
@@ -27,7 +27,7 @@ ygs_pl="$(realpath -e "$ygs_pl")"
 window=500000 # window size = 500 kb
 win_str="$((window / 1000))kb" # get string from window size
 k=15 # k-mer size = 15
-target_cov=60 # target coverage with reads = 60x
+target_cov=25 # target coverage with reads = 25x
 outdir="${job_name}_results" # main output directory
 os_reads_file="os_reads.txt" # list of opposite sex read paths
 ss_reads_file="ss_reads.txt" # list of same sex read paths
@@ -64,7 +64,7 @@ Output:
   ├── <genome>_$win_str.ctg_rep.gz     # YGS bit-array of genomic repeat ${k}-mers found in > 1 contig
   ├── <genome>_$win_str.fasta.gz       # genome FASTA split into $win_str sliding windows
   ├── <genome>_$win_str.gen_rep.gz     # YGS bit-array of genomic repeat ${k}-mers
-  ├── <genome>_$win_str_os_reads_k${k}_ss_reads_k${k}.final_result
+  ├── <genome>_${win_str}_${os_reads}_k${k}_ss_reads_k${k}.final_result
   ├── os_ids_table.tsv             # table of sample IDs and metadata (os)
   ├── os_reads.txt                 # list of read file paths (os)
   ├── os_reads_k$k.fasta.gz        # ${k}-mers extracted into FASTA (os)
@@ -129,7 +129,7 @@ nthrd="${SLURM_CPUS_PER_TASK:-1}"
 
 # Input
 asm_id="${1:-"SL-CT1-FG-3"}" # genome assembly ID
-genome="${2:-"assemblies/corteva_v2.fa"}" # genome FASTA of one sex (e.g., female, U)
+genome="${2:-"assemblies/corteva_v2_ha.fa"}" # genome FASTA of one sex (e.g., female, U)
 
 # Output
 mkdir -p "$outdir" # create output directory
@@ -199,8 +199,7 @@ echo
 echo "1. Opposite sex Illumina reads (w.r.t. assembly sample)"
 if ! [[ -f "$outdir/$os_jf" ]]; then # skip if output exists
   # Import list into array
-  # mapfile -t os_reads < "$outdir/$os_reads_file"
-  mapfile -t os_reads < <(head -n2 "$outdir/$os_reads_file") # DELETE
+  mapfile -t os_reads < "$outdir/$os_reads_file"
   # Write list of decompression commands to file
   os_gen=os_generators.txt # generator filename
   printf 'pigz -dc %q\n' "${os_reads[@]}" > "$outdir/$os_gen"
@@ -235,8 +234,7 @@ echo
 echo "2. Same sex Illumina reads (w.r.t. assembly sample)"
 if ! [[ -f "$outdir/$ss_jf" ]]; then # skip if output exists
   # Import list into array
-  # mapfile -t ss_reads < "$outdir/$ss_reads_file"
-  mapfile -t ss_reads < <(head -n2 "$outdir/$ss_reads_file") # DELETE
+  mapfile -t ss_reads < "$outdir/$ss_reads_file"
   # Write list of decompression commands to file
   ss_gen=ss_generators.txt # generator filename
   printf 'pigz -dc %q\n' "${ss_reads[@]}" > "$outdir/$ss_gen"

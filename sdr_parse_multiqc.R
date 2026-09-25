@@ -36,9 +36,9 @@ if (interactive()) {
   wd <- "/scratch2/kdeweese/corteva_genome"
   setwd(wd)
   # Target coverage of genome with reads
-  target_cov <- 60
+  target_cov <- 25
   # Genome assembly size (in bp)
-  asm_size <- 712691060
+  asm_size <- 653974634
   # Genome assembly ID
   asm_id <- "SL-CT1-FG-3"
   # Output directory

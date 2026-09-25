@@ -62,6 +62,7 @@ ggplot(filt_ygs_df,
   facet_wrap(~ n_Chr, scale = "free_x") +
   scale_x_continuous(name = "Position (bp)",
                      labels = ~ .x * 1e-3) +
+  scale_color_manual(values = c("black", "red")) +
   # coord_flip() +
   theme_minimal()
   # theme(
