@@ -20,7 +20,7 @@ ygs_cols <- c(
 )
 
 ## Input
-ygs_res_file <- "sdr_id_results_1/corteva_v2_500kb_os_reads_k15_ss_reads_k15.final_result"
+ygs_res_file <- "sdr_id_results/corteva_v2_ha_500kb_os_reads_k15_ss_reads_k15.final_result"
 
 ## Analysis
 lines <- trimws(readLines(ygs_res_file))
