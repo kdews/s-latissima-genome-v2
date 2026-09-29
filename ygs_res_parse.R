@@ -58,18 +58,11 @@ ggplot(filt_ygs_df,
                    yend = `Percent Validated Single-Copy Unmatched k-mers`),
                linewidth = 1,
                show.legend = F) +
-  # geom_point(show.legend = F) +
   facet_wrap(~ n_Chr, scale = "free_x") +
   scale_x_continuous(name = "Position (bp)",
                      labels = ~ .x * 1e-3) +
   scale_color_manual(values = c("black", "red")) +
-  # coord_flip() +
   theme_minimal()
-  # theme(
-  #   axis.ticks.y = element_blank(),
-  #   axis.text.y = element_blank(),
-  #   axis.title.y = element_blank()
-  # )
   
 
 

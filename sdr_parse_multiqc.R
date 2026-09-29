@@ -42,7 +42,7 @@ if (interactive()) {
   # Genome assembly ID
   asm_id <- "SL-CT1-FG-3"
   # Output directory
-  outdir <- "sdr_id_results"
+  outdir <- "ygs_sdr_results"
 } else {
   line_args <- commandArgs(trailingOnly = T)
   target_cov <- line_args[1]
