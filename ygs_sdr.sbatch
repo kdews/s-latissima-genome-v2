@@ -24,11 +24,12 @@ if [[ -d "$scripts_dir" ]]; then
   ygs_pl="$scripts_dir/$ygs_pl"
 fi
 ygs_pl="$(realpath -e "$ygs_pl")"
+main_outdir="${3:-sdr_id_results}" # main output directory
 window=500000 # window size = 500 kb
 win_str="$((window / 1000))kb" # get string from window size
 k=15 # k-mer size = 15
-target_cov=25 # target coverage with reads = 25x
-outdir="${job_name}_results" # main output directory
+target_cov=25 # target read coverage = 25x
+outdir="$main_outdir/${job_name}_results" # job type output directory
 os_reads_file="os_reads.txt" # list of opposite sex read paths
 ss_reads_file="ss_reads.txt" # list of same sex read paths
 
@@ -52,14 +53,15 @@ Carvalho and Clark (2013) using k=$k. Reads must be from opposite sex (os)
 with respect to the assembly, with a set of same sex (ss) reads used to
 validate assembly k-mers.
 
-Usage: sbatch $job_name.sbatch <asm_id> <genome.fasta(.gz)>
+Usage: sbatch $job_name.sbatch <genome.fasta(.gz)> <asm_id> [main_outdir]
 
 Input:
-  <asm_id>                assembly sample ID
-  <genome.fasta(.gz)>     genome assembly FASTA
+  genome.fasta(.gz)     # genome assembly FASTA
+  asm_id                # assembly sample ID
+  main_outdir           # output directory 
 
 Output:
-  ${job_name}_results/
+  $outdir/<genome>/
   ├── <genome>_$win_str.contig_result  # log for YGS contig mode
   ├── <genome>_$win_str.ctg_rep.gz     # YGS bit-array of genomic repeat ${k}-mers found in > 1 contig
   ├── <genome>_$win_str.fasta.gz       # genome FASTA split into $win_str sliding windows
@@ -128,13 +130,14 @@ nthrd="${SLURM_CPUS_PER_TASK:-1}"
 [[ -f "$ygs_pl" ]] || wget -O "$ygs_pl" "$ygs_url"
 
 # Input
-asm_id="${1:-"SL-CT1-FG-3"}" # genome assembly ID
-genome="${2:-"assemblies/corteva_v2_ha.fa"}" # genome FASTA of one sex (e.g., female, U)
+genome="${1:-"assemblies/corteva_v2_ha.fa"}" # genome FASTA of one sex (e.g., female, U)
+asm_id="${2:-"SL-CT1-FG-3"}" # genome assembly ID
 
 # Output
-mkdir -p "$outdir" # create output directory
 genome_basename="$(basename "$genome")" # genome filename basename
 genome_base="${genome_basename%%.fa*}" # genome filename base
+out="$outdir/$genome_base" # output subdirectory
+mkdir -p "$out" # create main output directory
 genome_windows="${genome_base}_${win_str}.fasta.gz" # genome split into windows
 os="os_reads_k$k" # basename for opposite sex outputs
 os_jf="$os.jf" # opposite sex k-mer counts
@@ -163,13 +166,13 @@ seq_cmd=(
   --greedy # don't toss end sequences shorter than window size
   -s "$window" # step size
   -W "$window" # window size
-  -o "$outdir/$genome_windows" # output binned FASTA
+  -o "$out/$genome_windows" # output binned FASTA
   "$genome" # input genome FASTA
 )
 set -x
 "${seq_cmd[@]}"
 { set +x; } 2>/dev/null
-check_output "$outdir/$genome_windows"
+check_output "$out/$genome_windows"
 echo; echo
 
 echo "Step 2: Filter for reads of opposite sex and same location as assembly sample"
@@ -181,10 +184,10 @@ module --latest load r
 Rscript --version || exit 1
 # Run Rscript
 set -x
-Rscript "$sdr_parse" "$target_cov" "$asm_size" "$asm_id" "$outdir"
+Rscript "$sdr_parse" "$target_cov" "$asm_size" "$asm_id" "$out"
 { set +x; } 2>/dev/null
-check_output "$outdir/$os_reads_file"
-check_output "$outdir/$ss_reads_file"
+check_output "$out/$os_reads_file"
+check_output "$out/$ss_reads_file"
 module purge
 echo; echo
 
@@ -197,12 +200,12 @@ echo "Preparing $k-mers for..."
 echo
 # Generate k-mer sequences from opposite sex Illumina reads
 echo "1. Opposite sex Illumina reads (w.r.t. assembly sample)"
-if ! [[ -f "$outdir/$os_jf" ]]; then # skip if output exists
+if ! [[ -f "$out/$os_jf" ]]; then # skip if output exists
   # Import list into array
-  mapfile -t os_reads < "$outdir/$os_reads_file"
+  mapfile -t os_reads < "$out/$os_reads_file"
   # Write list of decompression commands to file
   os_gen=os_generators.txt # generator filename
-  printf 'pigz -dc %q\n' "${os_reads[@]}" > "$outdir/$os_gen"
+  printf 'pigz -dc %q\n' "${os_reads[@]}" > "$out/$os_gen"
   n_g=4 # number of concurrent generators
   count_cmd=(
     jellyfish count
@@ -212,32 +215,32 @@ if ! [[ -f "$outdir/$os_jf" ]]; then # skip if output exists
     -C # count both strand, canonical representation
     --quality-start=33 # ASCII for quality values (Illumina 1.9)
     --min-quality=20 # minimum quality (hard masked)
-    -g "$outdir/$os_gen" # list of decompression commands
+    -g "$out/$os_gen" # list of decompression commands
     -G "$n_g" # number of concurrent generators to run at once
-    -o "$outdir/$os_jf" # output filename
+    -o "$out/$os_jf" # output filename
   )
   set -x
   "${count_cmd[@]}"
   { set +x; } 2>/dev/null
 fi
-check_output "$outdir/$os_jf" && rm "$outdir/$os_gen"
+check_output "$out/$os_jf" && rm "$out/$os_gen"
 # Convert k-mer FASTQ to FASTA, filter for minimum frequency = 5
-if ! [[ -f "$outdir/$os_jfa" ]]; then # skip if output exists
+if ! [[ -f "$out/$os_jfa" ]]; then # skip if output exists
   set -x
-  jellyfish dump --lower-count=5 "$outdir/$os_jf" | gzip -c > "$outdir/$os_jfa"
+  jellyfish dump --lower-count=5 "$out/$os_jf" | gzip -c > "$out/$os_jfa"
   { set +x; } 2>/dev/null
 fi
-check_output "$outdir/$os_jfa"
+check_output "$out/$os_jfa"
 echo
 
 # Generate k-mer sequences from same sex Illumina reads
 echo "2. Same sex Illumina reads (w.r.t. assembly sample)"
-if ! [[ -f "$outdir/$ss_jf" ]]; then # skip if output exists
+if ! [[ -f "$out/$ss_jf" ]]; then # skip if output exists
   # Import list into array
-  mapfile -t ss_reads < "$outdir/$ss_reads_file"
+  mapfile -t ss_reads < "$out/$ss_reads_file"
   # Write list of decompression commands to file
   ss_gen=ss_generators.txt # generator filename
-  printf 'pigz -dc %q\n' "${ss_reads[@]}" > "$outdir/$ss_gen"
+  printf 'pigz -dc %q\n' "${ss_reads[@]}" > "$out/$ss_gen"
   n_g=4 # number of concurrent generators
   count_cmd=(
     jellyfish count
@@ -247,27 +250,27 @@ if ! [[ -f "$outdir/$ss_jf" ]]; then # skip if output exists
     -C # count both strand, canonical representation
     --quality-start=33 # ASCII for quality values (Illumina 1.9)
     --min-quality=20 # minimum quality (hard masked)
-    -g "$outdir/$ss_gen" # list of decompression commands
+    -g "$out/$ss_gen" # list of decompression commands
     -G "$n_g" # number of concurrent generators to run at once
-    -o "$outdir/$ss_jf" # output filename
+    -o "$out/$ss_jf" # output filename
   )
   set -x
   "${count_cmd[@]}"
   { set +x; } 2>/dev/null
 fi
-check_output "$outdir/$ss_jf" && rm "$outdir/$ss_gen"
+check_output "$out/$ss_jf" && rm "$out/$ss_gen"
 # Convert k-mer FASTQ to FASTA, filter for minimum frequency = 1
-if ! [[ -f "$outdir/$ss_jfa" ]]; then # skip if output exists
+if ! [[ -f "$out/$ss_jfa" ]]; then # skip if output exists
   set -x
-  jellyfish dump --lower-count=1 "$outdir/$ss_jf" | gzip -c > "$outdir/$ss_jfa"
+  jellyfish dump --lower-count=1 "$out/$ss_jf" | gzip -c > "$out/$ss_jfa"
   { set +x; } 2>/dev/null
 fi
-check_output "$outdir/$ss_jfa"
+check_output "$out/$ss_jfa"
 conda deactivate
 echo; echo
 
 echo "Step 4: Run YGS.pl"
-# Activate YGS env
+# Activate YGS Perl env
 # mamba create -n ygs conda-forge::perl conda-forge::perl-bit-vector \
 #   conda-forge::perl-carp-clan bioconda::perl-perlio-gzip
 conda activate ygs
@@ -275,8 +278,8 @@ perl --version | grep "version" || exit 1
 perl -MBit::Vector -MCarp::Clan -MPerlIO::gzip \
   -e 'print "All required modules found\n"' || exit 1
 # Change to output directory to control output location
-cd "$outdir" || { echo "Erorr: Output directory ($outdir) not found."; exit 1; }
-echo "YGS output will be in: $outdir"
+cd "$out" || { echo "Erorr: Output directory ($out) not found."; exit 1; }
+echo "YGS output will be in: $out"
 
 # Produce bit-array from opposite sex k-mers, filtered by quality and frequency
 echo "Producing bit-array from..."

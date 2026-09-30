@@ -38,11 +38,12 @@ if (interactive()) {
   # Target coverage of genome with reads
   target_cov <- 25
   # Genome assembly size (in bp)
-  asm_size <- 653974634
+  # asm_size <- 653974634 # corteva_v2_ha
+  asm_size <- 712691060 # corteva_v2
   # Genome assembly ID
   asm_id <- "SL-CT1-FG-3"
   # Output directory
-  outdir <- "ygs_sdr_results"
+  outdir <- "sdr_id_results/ygs_sdr_results/corteva_v2_ha"
 } else {
   line_args <- commandArgs(trailingOnly = T)
   target_cov <- line_args[1]
@@ -90,16 +91,14 @@ if (dir.exists(outdir)) {
 
 ## Data filtering
 # Filter MultiQC general stats table for relevant columns
-mqc_df <- read_tsv(mqc_stats_file, show_col_types = F)
-mqc_df <- mqc_df %>%
+mqc_raw <- read_tsv(mqc_stats_file, show_col_types = F)
+mqc_df <- mqc_raw %>%
   select(Sample,
          Mean_Read_Depth = `samtools_coverage-meandepth`,
          Coverage_Percent = `samtools_coverage-coverage`,
          Mapped_Percent = `samtools_stats-reads_mapped_percent`) %>%
   # Remove non-sample level rows
-  filter(!is.na(Mapped_Percent)) %>%
-  # Sort by mean read depth
-  arrange(desc(Mean_Read_Depth))
+  filter(!is.na(Mapped_Percent))
 # Add aligned bases column
 aln_df <- read_tsv(aln_file, show_col_types = F) %>%
   rename(Aligned_Bases = `Aligned Bases`)
@@ -115,20 +114,25 @@ asm_df <- ids_df %>%
   filter(Sample == asm_id) %>%
   select(sex, Location)
 filt_ids_df <- ids_df %>%
-  filter(Location == asm_df$Location)
+  filter(Location == asm_df$Location) %>%
+  # Sort by mean read depth
+  arrange(desc(Mean_Read_Depth))
 
-# Filter for samples of opposite sex as assembly
+# Opposite sex reads
 os_ids_df <- filt_ids_df %>%
-  filter(sex != asm_df$sex)
+  # Filter for samples of opposite sex as assembly
+  filter(sex != asm_df$sex) %>%
+  # Sort by mean read depth
+  arrange(desc(Mean_Read_Depth))
 # Calculate estimated genome coverage with reads from aligned bases
 os_bases <- sum(os_ids_df$Aligned_Bases, na.rm = T)
 os_cov <- os_bases/asm_size
-while (os_cov > target_cov && nrow(os_ids_df) > 0) {
-  os_ids_df <- os_ids_df %>%
-    slice(-n())
-  os_bases <- sum(os_ids_df$Aligned_Bases, na.rm = T)
-  os_cov <- os_bases/asm_size
-}
+# while (os_cov > target_cov && nrow(os_ids_df) > 0) {
+#   os_ids_df <- os_ids_df %>%
+#     slice(-n())
+#   os_bases <- sum(os_ids_df$Aligned_Bases, na.rm = T)
+#   os_cov <- os_bases/asm_size
+# }
 # Log filtering
 cat("Log for opposite sex reads...\n")
 cat("Estimated genome coverage: ", round(os_cov, digits = 1),
@@ -136,25 +140,32 @@ cat("Estimated genome coverage: ", round(os_cov, digits = 1),
 # Create data frame of sample IDs and read paths
 os_reads <- os_ids_df %>%
   select(Sample) %>%
+  rowwise() %>%
   mutate(Reads = paste(list.files(path = paste0(popgen_dir, "/trimmed_reads"),
                                   pattern = paste0(Sample, "_"), full.names = T),
                        collapse = ";")) %>%
+  ungroup() %>%
   separate_longer_delim(Reads, delim = ";") %>%
   select(Reads)
 cat("Total (expected) aligned bases:", round(os_bases*1e-9, digits = 1), "Gb\n")
+cat("Number of samples:", length(unique(os_ids_df$Sample)), "\n")
+cat("Number of sequencing runs:", dim(os_reads)[1]/2, "\n")
 
-# Filter for samples of same sex as assembly
+# Same sex reads
 ss_ids_df <- filt_ids_df %>%
-  filter(sex == asm_df$sex)
+  # Filter for samples of same sex as assembly
+  filter(sex == asm_df$sex) %>%
+  # Sort by mean read depth
+  arrange(desc(Mean_Read_Depth))
 # Calculate estimated genome coverage with reads from aligned bases
 ss_bases <- sum(ss_ids_df$Aligned_Bases, na.rm = T)
 ss_cov <- ss_bases/asm_size
-while (ss_cov > target_cov && nrow(ss_ids_df) > 0) {
-  ss_ids_df <- ss_ids_df %>%
-    slice(-n())
-  ss_bases <- sum(ss_ids_df$Aligned_Bases, na.rm = T)
-  ss_cov <- ss_bases/asm_size
-}
+# while (ss_cov > target_cov && nrow(ss_ids_df) > 0) {
+#   ss_ids_df <- ss_ids_df %>%
+#     slice(-n())
+#   ss_bases <- sum(ss_ids_df$Aligned_Bases, na.rm = T)
+#   ss_cov <- ss_bases/asm_size
+# }
 # Log filtering
 cat("Log for same sex reads...\n")
 cat("Estimated genome coverage: ", round(ss_cov, digits = 1),
@@ -162,12 +173,16 @@ cat("Estimated genome coverage: ", round(ss_cov, digits = 1),
 # Create data frame of sample IDs and read paths
 ss_reads <- ss_ids_df %>%
   select(Sample) %>%
+  rowwise() %>%
   mutate(Reads = paste(list.files(path = paste0(popgen_dir, "/trimmed_reads"),
                                   pattern = paste0(Sample, "_"), full.names = T),
                        collapse = ";")) %>%
+  ungroup() %>%
   separate_longer_delim(Reads, delim = ";") %>%
   select(Reads)
 cat("Total (expected) aligned bases:", round(ss_bases*1e-9, digits = 1), "Gb\n")
+cat("Number of samples:", length(unique(ss_ids_df$Sample)), "\n")
+cat("Number of sequencing runs:", dim(ss_reads)[1]/2, "\n")
 
 ## Write output files
 # ID metadata tables

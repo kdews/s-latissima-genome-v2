@@ -91,8 +91,7 @@ reads_opt="$3" # variable to toggle reads mode on/off
 assemblies=("${@:4}") # uncompressed assembly FASTA(s)
 # Multithread support
 nthrd="${SLURM_CPUS_PER_TASK:-1}"
-# Output directory name
-out="$outdir/$label"
+out="$outdir/$label" # output subdirectory
 [[ -d "$out" ]] && { echo "Error: Delete existing output dir: $out"; exit 1; }
 # Log details and check input FASTAs exist
 echo
