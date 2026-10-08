@@ -4,6 +4,7 @@ rm(list = ls())
 # Load required packages
 suppressPackageStartupMessages(library(tidyverse))
 
+
 ## Functions
 # Annotate dataframe with metadata, where column "label" contains individual IDs
 metaDf <- function(df, label) {
@@ -29,6 +30,7 @@ metaDf <- function(df, label) {
   return(df_annot)
 }
 
+
 ## Input
 # Only take command line input if not running interactively
 if (interactive()) {
@@ -42,14 +44,16 @@ if (interactive()) {
   asm_size <- 712691060 # corteva_v2
   # Genome assembly ID
   asm_id <- "SL-CT1-FG-3"
-  # Output directory
-  outdir <- "sdr_id_results/ygs_sdr_results/corteva_v2_ha"
+  # Output directories
+  ygs_out <- "sdr_id_results/ygs_sdr_results/corteva_v2_ha"
+  depth_out <- "sdr_id_results/depth_sdr_results/corteva_v2_ha"
 } else {
   line_args <- commandArgs(trailingOnly = T)
   target_cov <- line_args[1]
   asm_size <- line_args[2]
   asm_id <- line_args[3]
-  outdir <- line_args[4]
+  ygs_out <- line_args[4]
+  depth_out <- line_args[5]
 }
 target_cov <- as.numeric(target_cov)
 asm_size <- as.numeric(asm_size)
@@ -77,17 +81,25 @@ pop_codes_file <- list.files(path = vcf_dir, recursive = T,
                              pattern = "Saccharina_pop_codes_WHOI.csv",
                              full.names = T)
 
+
 ## Output
-os_ids_file <- "os_ids_table.tsv"
-os_reads_file <- "os_reads.txt"
-ss_ids_file <- "ss_ids_table.tsv"
-ss_reads_file <- "ss_reads.txt"
-if (dir.exists(outdir)) {
-  os_ids_file <- file.path(outdir, os_ids_file)
-  os_reads_file <- file.path(outdir, os_reads_file)
-  ss_ids_file <- file.path(outdir, ss_ids_file)
-  ss_reads_file <- file.path(outdir, ss_reads_file)
+ygs_os_tab_file <- "os_table.tsv"
+ygs_ss_tab_file <- "ss_table.tsv"
+ygs_os_reads_file <- "os.txt"
+ygs_ss_reads_file <- "ss.txt"
+depth_tab_file <- "os_ss_table.tsv"
+depth_reads_file <- "os_ss.txt"
+if (dir.exists(ygs_out)) {
+  ygs_os_tab_file <- file.path(ygs_out, ygs_os_tab_file)
+  ygs_os_reads_file <- file.path(ygs_out, ygs_os_reads_file)
+  ygs_ss_tab_file <- file.path(ygs_out, ygs_ss_tab_file)
+  ygs_ss_reads_file <- file.path(ygs_out, ygs_ss_reads_file)
 }
+if (dir.exists(depth_out)) {
+  depth_tab_file <- file.path(depth_out, depth_tab_file)
+  depth_reads_file <- file.path(depth_out, depth_reads_file)
+}
+
 
 ## Data filtering
 # Filter MultiQC general stats table for relevant columns
@@ -118,7 +130,9 @@ filt_ids_df <- ids_df %>%
   # Sort by mean read depth
   arrange(desc(Mean_Read_Depth))
 
-# Opposite sex reads
+
+## YGS SDR ID
+# YGS opposite sex reads
 os_ids_df <- filt_ids_df %>%
   # Filter for samples of opposite sex as assembly
   filter(sex != asm_df$sex) %>%
@@ -127,6 +141,7 @@ os_ids_df <- filt_ids_df %>%
 # Calculate estimated genome coverage with reads from aligned bases
 os_bases <- sum(os_ids_df$Aligned_Bases, na.rm = T)
 os_cov <- os_bases/asm_size
+# # Filter for YGS
 # while (os_cov > target_cov && nrow(os_ids_df) > 0) {
 #   os_ids_df <- os_ids_df %>%
 #     slice(-n())
@@ -151,7 +166,7 @@ cat("Total (expected) aligned bases:", round(os_bases*1e-9, digits = 1), "Gb\n")
 cat("Number of samples:", length(unique(os_ids_df$Sample)), "\n")
 cat("Number of sequencing runs:", dim(os_reads)[1]/2, "\n")
 
-# Same sex reads
+# YGS same sex reads
 ss_ids_df <- filt_ids_df %>%
   # Filter for samples of same sex as assembly
   filter(sex == asm_df$sex) %>%
@@ -160,6 +175,7 @@ ss_ids_df <- filt_ids_df %>%
 # Calculate estimated genome coverage with reads from aligned bases
 ss_bases <- sum(ss_ids_df$Aligned_Bases, na.rm = T)
 ss_cov <- ss_bases/asm_size
+# # Filter for YGS
 # while (ss_cov > target_cov && nrow(ss_ids_df) > 0) {
 #   ss_ids_df <- ss_ids_df %>%
 #     slice(-n())
@@ -184,10 +200,19 @@ cat("Total (expected) aligned bases:", round(ss_bases*1e-9, digits = 1), "Gb\n")
 cat("Number of samples:", length(unique(ss_ids_df$Sample)), "\n")
 cat("Number of sequencing runs:", dim(ss_reads)[1]/2, "\n")
 
-## Write output files
-# ID metadata tables
-write_tsv(os_ids_df, os_ids_file) # opposite sex
-write_tsv(ss_ids_df, ss_ids_file) # same sex
-# Paths to reads
-write_tsv(os_reads, os_reads_file, col_names = F) # opposite sex
-write_tsv(ss_reads, ss_reads_file, col_names = F) # same sex
+# Write YGS output files
+write_tsv(os_ids_df, ygs_os_tab_file) # opposite sex metadata
+write_tsv(ss_ids_df, ygs_ss_tab_file) # same sex metadata
+write_tsv(os_reads, ygs_os_reads_file, col_names = F) # opposite sex reads
+write_tsv(ss_reads, ygs_ss_reads_file, col_names = F) # same sex reads
+
+
+## Depth SDR ID
+sort_ids_df <- ids_df %>%
+  mutate(Dist_from_Asm = abs(Latitude - asm_df$Latitude) + 
+           abs(Longitude - asm_df$Longitude)) %>%
+  arrange(desc(Mean_Read_Depth))
+
+write_tsv(os_ss_df, depth_tab_file, col_names = F) # 
+write_tsv(os_reads, depth_reads_file, col_names = F) # 
+

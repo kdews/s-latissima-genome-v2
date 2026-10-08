@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J ygs_sdr
+#SBATCH -J depth_sdr
 #SBATCH -o %x_logs/%x_%j.log
 #SBATCH -p oneweek
 #SBATCH --time=7-0
@@ -8,10 +8,11 @@
 
 # Script variables
 # Extract job name from script
-if [[ -z "$SLURM_JOB_NAME" ]]; then
-  job_name="$(basename "$0")"
+if [[ -n ${SLURM_JOB_NAME:-} ]]; then
+  job_name="$SLURM_JOB_NAME"
+elif [[ -n ${BASH_SOURCE[0]:-} && ${BASH_SOURCE[0]} != "bash" ]]; then
+  job_name="$(basename "${BASH_SOURCE[0]}")"
   job_name="${job_name%%.*}"
 else
-  job_name="$SLURM_JOB_NAME" # job_name=sdr_id
+  job_name="depth_sdr"
 fi
-

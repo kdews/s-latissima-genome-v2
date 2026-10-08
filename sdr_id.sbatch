@@ -8,33 +8,41 @@
 
 # Script variables
 # Extract job name from script
-if [[ -z "$SLURM_JOB_NAME" ]]; then
-  job_name="$(basename "$0")"
+if [[ -n ${SLURM_JOB_NAME:-} ]]; then
+  job_name="$SLURM_JOB_NAME"
+elif [[ -n ${BASH_SOURCE[0]:-} && ${BASH_SOURCE[0]} != "bash" ]]; then
+  job_name="$(basename "${BASH_SOURCE[0]}")"
   job_name="${job_name%%.*}"
 else
-  job_name="$SLURM_JOB_NAME" # job_name=sdr_id
+  job_name="sdr_id"
 fi
+main_outdir="${job_name}_results" # main SDR output directory
+# YGS SDR job variables
+ygs_job_name="ygs_sdr"
+ygs_job="$ygs_job_name.sbatch" # Slurm job submission script
+ygs_outdir="${ygs_job_name}_results" # output subdirectory
 # URL to YGS.pl from Carvalho and Clark (2013)
 ygs_url="https://genome.cshlp.org/content/genome/suppl/2013/09/24/gr.156034.113.DC1/YGS.txt"
-ygs_pl="YGS.pl" # output name of YGS script once downloaded
+ygs_pl="YGS.pl" # local name of YGS script
 sdr_parse="sdr_parse_multiqc.R" # R script parses reads for YGS from MultiQC data
-ygs_job="ygs_sdr.sbatch" # YGS SDR ID job submission script
-depth_job="depth_sdr.sbatch" # read depth SDR ID job submission script
+# Read depth SDR job variables
+depth_job_name="depth_sdr"
+depth_job="$depth_job_name.sbatch" # Slurm job submission script
+depth_outdir="${depth_job_name}_results" # output subdirectory
 scripts_dir="s-latissima-genome-v2" # scripts directory
 if [[ -d "$scripts_dir" ]]; then
-  sdr_parse="$scripts_dir/$sdr_parse"
-  ygs_pl="$scripts_dir/$ygs_pl"
   ygs_job="$scripts_dir/$ygs_job"
+  ygs_pl="$scripts_dir/$ygs_pl"
+  sdr_parse="$scripts_dir/$sdr_parse"
   depth_job="$scripts_dir/$depth_job"
 fi
 ygs_pl="$(realpath -e "$ygs_pl")"
-outdir="${job_name}_results" # main output directory
 window=500000 # window size = 500 kb
 win_str="$((window / 1000))kb" # get string from window size
 k=15 # k-mer size = 15
 target_cov=25 # target read coverage = 25x
-os_reads_file="os_reads.txt" # list of opposite sex read paths
-ss_reads_file="ss_reads.txt" # list of same sex read paths
+os_reads_file="os.txt" # list of paths to opposite sex reads
+ss_reads_file="ss.txt" # list of paths to same sex reads
 
 # Function to check output file exists before next step
 check_output () {
@@ -59,28 +67,36 @@ validate assembly k-mers.
 Usage: sbatch $job_name.sbatch <genome.fasta(.gz)> <asm_id>
 
 Input:
-  <asm_id>                assembly sample ID
-  <genome.fasta(.gz)>     genome assembly FASTA
+  asm_id                assembly sample ID
+  genome.fasta(.gz)     genome assembly FASTA
 
 Output:
-  ${job_name}_results/
-  ├── <genome>_$win_str.contig_result  # log for YGS contig mode
-  ├── <genome>_$win_str.ctg_rep.gz     # YGS bit-array of genomic repeat ${k}-mers found in > 1 contig
-  ├── <genome>_$win_str.fasta.gz       # genome FASTA split into $win_str sliding windows
-  ├── <genome>_$win_str.gen_rep.gz     # YGS bit-array of genomic repeat ${k}-mers
-  ├── <genome>_${win_str}_${os_reads}_k${k}_ss_reads_k${k}.final_result
-  ├── os_ids_table.tsv             # table of sample IDs and metadata (os)
-  ├── os_reads.txt                 # list of read file paths (os)
-  ├── os_reads_k$k.fasta.gz        # ${k}-mers extracted into FASTA (os)
-  ├── os_reads_k$k.jf              # ${k}-mer Jellyfish binary hash (os)
-  ├── os_reads_k$k.trace.gz        # YGS ${k}-mer bit-array (ss)
-  ├── os_reads_k$k.trace_result    # log for YGS trace mode (os)
-  ├── ss_ids_table.tsv             # table of sample IDs and metadata (ss)
-  ├── ss_reads.txt                 # list of same sex read file paths (ss)
-  ├── ss_reads_k$k.fasta.gz        # ${k}-mers extracted into FASTA (ss)
-  ├── ss_reads_k$k.jf              # ${k}-mer Jellyfish binary hash (ss)
-  ├── ss_reads_k$k.trace.gz        # YGS ${k}-mer bit-array (ss)
-  └── ss_reads_k$k.trace_result    # log for YGS trace mode (ss)
+  $main_outdir/
+  ├── $ygs_outdir/
+  │   └── <genome>/
+  │       ├── ${win_str}_windows.contig_result                  # log for YGS contig mode
+  │       ├── ${win_str}_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers found in > 1 contig
+  │       ├── ${win_str}_windows.fasta.gz                       # genome FASTA split into $win_str sliding windows
+  │       ├── ${win_str}_windows.gen_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers
+  │       ├── ${win_str}_windows_os_k${k}_ss_k${k}.final_result # speaks for itself
+  │       ├── os_table.tsv                                      # table of sample IDs and metadata (os)
+  │       ├── os.txt                                            # list of read file paths (os)
+  │       ├── os_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (os)
+  │       ├── os_k$k.jf                                         # ${k}-mer Jellyfish binary hash (os)
+  │       ├── os_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
+  │       ├── os_k$k.trace_result                               # log for YGS trace mode (os)
+  │       ├── ss_table.tsv                                      # table of sample IDs and metadata (ss)
+  │       ├── ss.txt                                            # list of same sex read file paths (ss)
+  │       ├── ss_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (ss)
+  │       ├── ss_k$k.jf                                         # ${k}-mer Jellyfish binary hash (ss)
+  │       ├── ss_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
+  │       └── ss_k$k.trace_result                               # log for YGS trace mode (ss)
+  └── $depth_outdir/
+      ├── 
+      ├── 
+      ├── 
+      ├── 
+      └── 
 
 Requires:
  - seqkit v2.3.1+ (https://bioinf.shenwei.me/seqkit/)
@@ -134,19 +150,41 @@ nthrd="${SLURM_CPUS_PER_TASK:-1}"
 # Input
 genome="${1:-"assemblies/corteva_v2_ha.fa"}" # genome FASTA of one sex (e.g., female, U)
 asm_id="${2:-"SL-CT1-FG-3"}" # genome assembly ID
-
-# Output
-mkdir -p "$outdir" # create main output directory
-genome_basename="$(basename "$genome")" # genome filename basename
-genome_base="${genome_basename%%.fa*}" # genome filename base
-
 genomes=("$genome")
 asm_ids=("$asm_id")
 
+# Iterate through genomes
 for i in "${!genomes[@]}"; do
-  sbatch "$ygs_job" "${genomes[i]}" "${asm_ids[i]}" "$outdir"
-  sbatch "$depth_job" "${genomes[i]}" "${asm_ids[i]}" "$outdir"
+  # Output
+  genome_basename="$(basename "$genome")" # genome filename basename
+  genome_base="${genome_basename%%.fa*}" # genome filename base
+  ygs_out="$main_outdir/$ygs_outdir/$genome_base" # YGS job output subdirectory
+  depth_out="$main_outdir/$depth_outdir/$genome_base" # depth job output subdirectory
+  mkdir -p "$ygs_out" "$depth_out" # create output directories
+
+  echo "Filtering for reads of opposite sex and same location as assembly sample..."
+  # Get assembly size
+  asm_size="$(seqkit stats -j "$nthrd" -T "$genome" | tail -n+2 | cut -f5)"
+  conda deactivate
+  # Load R module
+  module --latest load r
+  Rscript --version || exit 1
+  # Run Rscript
+  set -x
+  Rscript "$sdr_parse" "$target_cov" "$asm_size" "$asm_id" "$ygs_out" "$depth_out"
+  { set +x; } 2>/dev/null
+  check_output "$ygs_out/$os_reads_file"
+  check_output "$ygs_out/$ss_reads_file"
+  module purge
+  echo; echo
+
+  # d
+  sbatch "$ygs_job" "${genomes[i]}" "${asm_ids[i]}" "$main_outdir"
+  sbatch "$depth_job" "${genomes[i]}" "${asm_ids[i]}" "$main_outdir"
+
 done
+
+
 
 # Print date and time
 echo

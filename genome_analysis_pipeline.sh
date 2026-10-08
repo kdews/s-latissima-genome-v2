@@ -6,12 +6,13 @@
 
 # Script variables
 # Extract job name from script
-if [[ -z "$SLURM_JOB_NAME" ]]
-then
-  job_name="$(basename "$0")"
+if [[ -n ${SLURM_JOB_NAME:-} ]]; then
+  job_name="$SLURM_JOB_NAME"
+elif [[ -n ${BASH_SOURCE[0]:-} && ${BASH_SOURCE[0]} != "bash" ]]; then
+  job_name="$(basename "${BASH_SOURCE[0]}")"
   job_name="${job_name%%.*}"
 else
-  job_name="$SLURM_JOB_NAME"
+  job_name="genome_analysis_pipeline"
 fi
 
 # Help message
