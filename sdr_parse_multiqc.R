@@ -3,6 +3,8 @@
 rm(list = ls())
 # Load required packages
 suppressPackageStartupMessages(library(tidyverse))
+library(geosphere)
+library(ggpubr)
 
 
 ## Functions
@@ -121,10 +123,10 @@ pop_codes <- read_csv(pop_codes_file, show_col_types = F)
 # Annotate full data frame with metadata
 ids_df <- metaDf(ids_df, "Sample")
 
+## Assembly metadata matching
 # Keep only samples from assembly sample location
 asm_df <- ids_df %>%
-  filter(Sample == asm_id) %>%
-  select(sex, Location)
+  filter(Sample == asm_id)
 filt_ids_df <- ids_df %>%
   filter(Location == asm_df$Location) %>%
   # Sort by mean read depth
@@ -132,6 +134,7 @@ filt_ids_df <- ids_df %>%
 
 
 ## YGS SDR ID
+cat("YGS read filtering\n")
 # YGS opposite sex reads
 os_ids_df <- filt_ids_df %>%
   # Filter for samples of opposite sex as assembly
@@ -141,13 +144,13 @@ os_ids_df <- filt_ids_df %>%
 # Calculate estimated genome coverage with reads from aligned bases
 os_bases <- sum(os_ids_df$Aligned_Bases, na.rm = T)
 os_cov <- os_bases/asm_size
-# # Filter for YGS
-# while (os_cov > target_cov && nrow(os_ids_df) > 0) {
-#   os_ids_df <- os_ids_df %>%
-#     slice(-n())
-#   os_bases <- sum(os_ids_df$Aligned_Bases, na.rm = T)
-#   os_cov <- os_bases/asm_size
-# }
+# Filter for YGS
+while (os_cov > target_cov && nrow(os_ids_df) > 0) {
+  os_ids_df <- os_ids_df %>%
+    slice(-n())
+  os_bases <- sum(os_ids_df$Aligned_Bases, na.rm = T)
+  os_cov <- os_bases/asm_size
+}
 # Log filtering
 cat("Log for opposite sex reads...\n")
 cat("Estimated genome coverage: ", round(os_cov, digits = 1),
@@ -175,13 +178,13 @@ ss_ids_df <- filt_ids_df %>%
 # Calculate estimated genome coverage with reads from aligned bases
 ss_bases <- sum(ss_ids_df$Aligned_Bases, na.rm = T)
 ss_cov <- ss_bases/asm_size
-# # Filter for YGS
-# while (ss_cov > target_cov && nrow(ss_ids_df) > 0) {
-#   ss_ids_df <- ss_ids_df %>%
-#     slice(-n())
-#   ss_bases <- sum(ss_ids_df$Aligned_Bases, na.rm = T)
-#   ss_cov <- ss_bases/asm_size
-# }
+# Filter for YGS
+while (ss_cov > target_cov && nrow(ss_ids_df) > 0) {
+  ss_ids_df <- ss_ids_df %>%
+    slice(-n())
+  ss_bases <- sum(ss_ids_df$Aligned_Bases, na.rm = T)
+  ss_cov <- ss_bases/asm_size
+}
 # Log filtering
 cat("Log for same sex reads...\n")
 cat("Estimated genome coverage: ", round(ss_cov, digits = 1),
@@ -200,19 +203,78 @@ cat("Total (expected) aligned bases:", round(ss_bases*1e-9, digits = 1), "Gb\n")
 cat("Number of samples:", length(unique(ss_ids_df$Sample)), "\n")
 cat("Number of sequencing runs:", dim(ss_reads)[1]/2, "\n")
 
-# Write YGS output files
+# Write YGS read files
 write_tsv(os_ids_df, ygs_os_tab_file) # opposite sex metadata
 write_tsv(ss_ids_df, ygs_ss_tab_file) # same sex metadata
-write_tsv(os_reads, ygs_os_reads_file, col_names = F) # opposite sex reads
-write_tsv(ss_reads, ygs_ss_reads_file, col_names = F) # same sex reads
+write_tsv(os_reads, ygs_os_reads_file, col_names = F) # paths to opposite sex reads
+write_tsv(ss_reads, ygs_ss_reads_file, col_names = F) # paths to same sex reads
 
 
-## Depth SDR ID
+## Sex-based depth comparison SDR ID
+# Filter for 10 samples per sex with min. coverage & closest to assembly sample
 sort_ids_df <- ids_df %>%
-  mutate(Dist_from_Asm = abs(Latitude - asm_df$Latitude) + 
-           abs(Longitude - asm_df$Longitude)) %>%
-  arrange(desc(Mean_Read_Depth))
+  rowwise() %>%
+  # Use Haversine formula to compute distances (in km)
+  mutate(Km_from_Asm = distHaversine(c(asm_df$Longitude, asm_df$Latitude),
+                                       c(Longitude, Latitude)) / 1e3,
+         Km_str = as.character(round(Km_from_Asm))) %>%
+  ungroup() %>%
+  arrange(Km_from_Asm) %>%
+  # mutate(Location = factor(Location, levels = unique(Location))) %>%
+  mutate(Km_str = factor(Km_str, levels = unique(Km_str)))
 
-write_tsv(os_ss_df, depth_tab_file, col_names = F) # 
-write_tsv(os_reads, depth_reads_file, col_names = F) # 
+# Plots
+p_distance_box <- ggplot(sort_ids_df,
+                         aes(x = Km_str, y = Mean_Read_Depth, fill = sex)) +
+  geom_boxplot() +
+  labs(x = "Distance from assembly sample (km)", y = "Mean read depth")
+p_sex_vio <- ggplot(sort_ids_df,
+                         aes(x = sex, y = Mean_Read_Depth, color = sex)) +
+  geom_violin(aes(fill = sex), color = "black", alpha = 0.8, trim = F) +
+  geom_boxplot(color = "black", width = 0.2) +
+  geom_jitter(color = "black", width = 0.05) +
+  labs(y = "Mean read depth")
+
+cutoffs <- sort(unique(sort_ids_df$Km_from_Asm))
+depth_by_cutoff <- map_dfr(
+  cutoffs,
+  function(cutoff) {
+    sort_ids_df %>%
+      ungroup() %>%
+      filter(Km_from_Asm <= cutoff) %>%
+      mutate(cutoff_str = as.character(round(cutoff)),
+             cutoff_str = factor(cutoff_str, levels = unique(cutoff_str))) %>%
+      summarise(cutoff_km = cutoff, cutoff_str = unique(cutoff_str), n = n(),
+                `Median Read Depth` = median(Mean_Read_Depth, na.rm = T),
+                `Total Read Depth` = sum(Mean_Read_Depth, na.rm = T),
+                `Median Aligned Bases (Gb)` = median(Aligned_Bases)/1e9,
+                `Total Aligned Bases (Gb)` = sum(Aligned_Bases)/1e9,
+                .by = sex) %>%
+      pivot_longer(-c(sex, contains("cutoff"), n),
+                   names_to = "stat", values_to = "value")
+  }
+)
+p_cutoff <- ggplot(depth_by_cutoff, aes(x = cutoff_km, y = value, color = sex)) +
+  geom_line() +
+  geom_point(aes(fill = sex, size = n), color = "black", shape = 21,
+             alpha = 0.5) +
+  labs(x = "Maximum distance from assembly sample (km)", y = "",
+       size = "Number of samples") +
+  facet_wrap(~ stat, scales = "free", nrow = 1) +
+  scale_x_continuous(n.breaks = length(cutoffs))
+
+p1 <- ggarrange(p_sex_vio, p_distance_box, nrow = 1, widths = c(1, 2))
+
+sort_ids_df %>%
+  # Minimum mean depth cutoff of 2
+  filter(Mean_Read_Depth >= 2) %>%
+  # CHOOSE PROGRAMATICALLY
+  filter(Km_from_Asm <= 65) %>%
+  # Sort by least distance from ref. location & highest depth
+  arrange(Km_from_Asm, desc(Mean_Read_Depth)) %>%
+  slice_head(n = 10, by = sex)
+
+# Write read files for sex-based depth comparison
+write_tsv(os_ss_df, depth_tab_file, col_names = F) # table of sample metadata
+write_tsv(os_reads, depth_reads_file, col_names = F) # paths to reads
 
