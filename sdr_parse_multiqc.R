@@ -246,8 +246,8 @@ depth_by_cutoff <- map_dfr(
              cutoff_str = factor(cutoff_str, levels = unique(cutoff_str))) %>%
       summarise(cutoff_km = cutoff, cutoff_str = unique(cutoff_str), n = n(),
                 `Median Read Depth` = median(Mean_Read_Depth, na.rm = T),
-                `Total Read Depth` = sum(Mean_Read_Depth, na.rm = T),
-                `Median Aligned Bases (Gb)` = median(Aligned_Bases)/1e9,
+                # `Total Read Depth` = sum(Mean_Read_Depth, na.rm = T),
+                # `Median Aligned Bases (Gb)` = median(Aligned_Bases)/1e9,
                 `Total Aligned Bases (Gb)` = sum(Aligned_Bases)/1e9,
                 .by = sex) %>%
       pivot_longer(-c(sex, contains("cutoff"), n),
@@ -272,7 +272,8 @@ sort_ids_df %>%
   filter(Km_from_Asm <= 65) %>%
   # Sort by least distance from ref. location & highest depth
   arrange(Km_from_Asm, desc(Mean_Read_Depth)) %>%
-  slice_head(n = 10, by = sex)
+  slice_head(n = 10, by = sex) %>%
+  summarize(total_bases_gb = sum(Aligned_Bases)/1e9, .by = sex)
 
 # Write read files for sex-based depth comparison
 write_tsv(os_ss_df, depth_tab_file, col_names = F) # table of sample metadata
