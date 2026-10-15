@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH -J sdr_id
 #SBATCH -o %x_logs/%x_%j.log
-#SBATCH -p oneweek
+#SBATCH -p htcondor
 #SBATCH --time=01:00:00
-#SBATCH --mem=10g
+#SBATCH --mem=40g
 #SBATCH --cpus-per-task=16
 
 # Script variables
@@ -43,6 +43,8 @@ k=15 # k-mer size = 15
 target_cov=25 # target read coverage = 25x
 os_reads_file="os.txt" # list of paths to opposite sex reads
 ss_reads_file="ss.txt" # list of paths to same sex reads
+depth_reads_file="os_ss.txt" # paths to same and opposite sex reads
+depth_tab_file="os_ss_table.tsv" # table of sample IDs
 
 # Function to check output file exists before next step
 check_output () {
@@ -75,7 +77,7 @@ Output:
   ├── $ygs_outdir/
   │   └── <genome>/
   │       ├── ${win_str}_windows.contig_result                  # log for YGS contig mode
-  │       ├── ${win_str}_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers found in > 1 contig
+  │       ├── ${win_str}_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers in > 1 contig
   │       ├── ${win_str}_windows.fasta.gz                       # genome FASTA split into $win_str sliding windows
   │       ├── ${win_str}_windows.gen_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers
   │       ├── ${win_str}_windows_os_k${k}_ss_k${k}.final_result # speaks for itself
@@ -103,7 +105,10 @@ Requires:
  - R v6+ (https://www.r-project.org)
  - Jellyfish v2.3.1+ (https://github.com/gmarcais/jellyfish)
  - pigz v2.8+ (https://zlib.net/pigz/)
- - Perl v5.23.1 (https://www.perl.org/)"
+ - Perl v5.23.1 (https://www.perl.org/)
+ - bwa-mem2 v2.2.1 (https://bio-bwa.sourceforge.net/)
+ - samtools v1.24 (https://www.htslib.org/)
+ - mosdepth v0.3.14 (https://github.com/brentp/mosdepth)"
 }
 if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
   show_help
@@ -158,12 +163,17 @@ for i in "${!genomes[@]}"; do
   # Output
   genome_basename="$(basename "$genome")" # genome filename basename
   genome_base="${genome_basename%%.fa*}" # genome filename base
+  genome_dict="${genome%%.fa*}.dict" # genome GATK4 dictionary (same path as FASTA)
   ygs_out="$main_outdir/$ygs_outdir/$genome_base" # YGS job output subdirectory
   depth_out="$main_outdir/$depth_outdir/$genome_base" # depth job output subdirectory
   mkdir -p "$ygs_out" "$depth_out" # create output directories
 
   echo "Filtering for reads of opposite sex and same location as assembly sample..."
   # Get assembly size
+  # Load seqkit env
+  conda activate seqkit
+  seqkit --help > /dev/null 2>&1 || exit 1
+  echo "seqkit $(seqkit --help | grep "^Version" || exit 1)"
   asm_size="$(seqkit stats -j "$nthrd" -T "$genome" | tail -n+2 | cut -f5)"
   conda deactivate
   # Load R module
@@ -175,16 +185,32 @@ for i in "${!genomes[@]}"; do
   { set +x; } 2>/dev/null
   check_output "$ygs_out/$os_reads_file"
   check_output "$ygs_out/$ss_reads_file"
+  check_output "$depth_out/$depth_reads_file"
+  check_output "$depth_out/$depth_tab_file"
   module purge
   echo; echo
+  
+  # Prep genome for depth analysis
+  # Index genome for bwa-mem2 alignment
+  conda activate bwa-mem2
+  set -x
+  bwa-mem2 index -p "$depth_out/$genome_base" "$genome"
+  { set +x; } 2>/dev/null
+  conda deactivate
+  # Load GATK4
+  module purge
+  module load gcc/13.3.0 gatk/4.5.0.0 python/3.13.2 openjdk/21.0.0_35
+  gatk --version || exit 1
+  # Build GATK4 sequence dictionary from genome FASTA
+  set -x
+  gatk CreateSequenceDictionary -R "$genome" -O "$genome_dict"
+  { set +x; } 2>/dev/null
+  module purge
 
-  # d
-  sbatch "$ygs_job" "${genomes[i]}" "${asm_ids[i]}" "$main_outdir"
-  sbatch "$depth_job" "${genomes[i]}" "${asm_ids[i]}" "$main_outdir"
-
+  # Submit YGS and depth jobs
+  sbatch "$ygs_job" "${genomes[i]}" "$main_outdir"
+  sbatch "$depth_job" "${genomes[i]}" "$main_outdir"
 done
-
-
 
 # Print date and time
 echo

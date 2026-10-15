@@ -89,8 +89,11 @@ ygs_os_tab_file <- "os_table.tsv"
 ygs_ss_tab_file <- "ss_table.tsv"
 ygs_os_reads_file <- "os.txt"
 ygs_ss_reads_file <- "ss.txt"
+depth_plot_file <- "depth_filt.png"
 depth_tab_file <- "os_ss_table.tsv"
 depth_reads_file <- "os_ss.txt"
+dir.create(ygs_out, recursive = T, showWarnings = F)
+dir.create(depth_out, recursive = T, showWarnings = F)
 if (dir.exists(ygs_out)) {
   ygs_os_tab_file <- file.path(ygs_out, ygs_os_tab_file)
   ygs_os_reads_file <- file.path(ygs_out, ygs_os_reads_file)
@@ -98,10 +101,10 @@ if (dir.exists(ygs_out)) {
   ygs_ss_reads_file <- file.path(ygs_out, ygs_ss_reads_file)
 }
 if (dir.exists(depth_out)) {
+  depth_plot_file <- file.path(depth_out, depth_plot_file)
   depth_tab_file <- file.path(depth_out, depth_tab_file)
   depth_reads_file <- file.path(depth_out, depth_reads_file)
 }
-
 
 ## Data filtering
 # Filter MultiQC general stats table for relevant columns
@@ -136,19 +139,19 @@ filt_ids_df <- ids_df %>%
 ## YGS SDR ID
 cat("YGS read filtering\n")
 # YGS opposite sex reads
-os_ids_df <- filt_ids_df %>%
+os_df <- filt_ids_df %>%
   # Filter for samples of opposite sex as assembly
   filter(sex != asm_df$sex) %>%
   # Sort by mean read depth
   arrange(desc(Mean_Read_Depth))
 # Calculate estimated genome coverage with reads from aligned bases
-os_bases <- sum(os_ids_df$Aligned_Bases, na.rm = T)
+os_bases <- sum(os_df$Aligned_Bases, na.rm = T)
 os_cov <- os_bases/asm_size
-# Filter for YGS
-while (os_cov > target_cov && nrow(os_ids_df) > 0) {
-  os_ids_df <- os_ids_df %>%
+# Filter for target coverage
+while (os_cov > target_cov && nrow(os_df) > 0) {
+  os_df <- os_df %>%
     slice(-n())
-  os_bases <- sum(os_ids_df$Aligned_Bases, na.rm = T)
+  os_bases <- sum(os_df$Aligned_Bases, na.rm = T)
   os_cov <- os_bases/asm_size
 }
 # Log filtering
@@ -156,7 +159,7 @@ cat("Log for opposite sex reads...\n")
 cat("Estimated genome coverage: ", round(os_cov, digits = 1),
     "x (target=", target_cov, "x).\n", sep = "")
 # Create data frame of sample IDs and read paths
-os_reads <- os_ids_df %>%
+os_reads <- os_df %>%
   select(Sample) %>%
   rowwise() %>%
   mutate(Reads = paste(list.files(path = paste0(popgen_dir, "/trimmed_reads"),
@@ -166,23 +169,23 @@ os_reads <- os_ids_df %>%
   separate_longer_delim(Reads, delim = ";") %>%
   select(Reads)
 cat("Total (expected) aligned bases:", round(os_bases*1e-9, digits = 1), "Gb\n")
-cat("Number of samples:", length(unique(os_ids_df$Sample)), "\n")
+cat("Number of samples:", length(unique(os_df$Sample)), "\n")
 cat("Number of sequencing runs:", dim(os_reads)[1]/2, "\n")
 
 # YGS same sex reads
-ss_ids_df <- filt_ids_df %>%
+ss_df <- filt_ids_df %>%
   # Filter for samples of same sex as assembly
   filter(sex == asm_df$sex) %>%
   # Sort by mean read depth
   arrange(desc(Mean_Read_Depth))
 # Calculate estimated genome coverage with reads from aligned bases
-ss_bases <- sum(ss_ids_df$Aligned_Bases, na.rm = T)
+ss_bases <- sum(ss_df$Aligned_Bases, na.rm = T)
 ss_cov <- ss_bases/asm_size
-# Filter for YGS
-while (ss_cov > target_cov && nrow(ss_ids_df) > 0) {
-  ss_ids_df <- ss_ids_df %>%
+# Filter for target coverage
+while (ss_cov > target_cov && nrow(ss_df) > 0) {
+  ss_df <- ss_df %>%
     slice(-n())
-  ss_bases <- sum(ss_ids_df$Aligned_Bases, na.rm = T)
+  ss_bases <- sum(ss_df$Aligned_Bases, na.rm = T)
   ss_cov <- ss_bases/asm_size
 }
 # Log filtering
@@ -190,7 +193,7 @@ cat("Log for same sex reads...\n")
 cat("Estimated genome coverage: ", round(ss_cov, digits = 1),
     "x (target=", target_cov, "x).\n", sep = "")
 # Create data frame of sample IDs and read paths
-ss_reads <- ss_ids_df %>%
+ss_reads <- ss_df %>%
   select(Sample) %>%
   rowwise() %>%
   mutate(Reads = paste(list.files(path = paste0(popgen_dir, "/trimmed_reads"),
@@ -200,12 +203,12 @@ ss_reads <- ss_ids_df %>%
   separate_longer_delim(Reads, delim = ";") %>%
   select(Reads)
 cat("Total (expected) aligned bases:", round(ss_bases*1e-9, digits = 1), "Gb\n")
-cat("Number of samples:", length(unique(ss_ids_df$Sample)), "\n")
+cat("Number of samples:", length(unique(ss_df$Sample)), "\n")
 cat("Number of sequencing runs:", dim(ss_reads)[1]/2, "\n")
 
 # Write YGS read files
-write_tsv(os_ids_df, ygs_os_tab_file) # opposite sex metadata
-write_tsv(ss_ids_df, ygs_ss_tab_file) # same sex metadata
+write_tsv(os_df, ygs_os_tab_file) # opposite sex metadata
+write_tsv(ss_df, ygs_ss_tab_file) # same sex metadata
 write_tsv(os_reads, ygs_os_reads_file, col_names = F) # paths to opposite sex reads
 write_tsv(ss_reads, ygs_ss_reads_file, col_names = F) # paths to same sex reads
 
@@ -224,17 +227,21 @@ sort_ids_df <- ids_df %>%
   mutate(Km_str = factor(Km_str, levels = unique(Km_str)))
 
 # Plots
-p_distance_box <- ggplot(sort_ids_df,
-                         aes(x = Km_str, y = Mean_Read_Depth, fill = sex)) +
-  geom_boxplot() +
-  labs(x = "Distance from assembly sample (km)", y = "Mean read depth")
-p_sex_vio <- ggplot(sort_ids_df,
-                         aes(x = sex, y = Mean_Read_Depth, color = sex)) +
+# Violin plot of all male vs. female read depth
+p_sex_vio <- ggplot(sort_ids_df, aes(x = sex, y = Mean_Read_Depth,
+                                     color = sex)) +
   geom_violin(aes(fill = sex), color = "black", alpha = 0.8, trim = F) +
   geom_boxplot(color = "black", width = 0.2) +
   geom_jitter(color = "black", width = 0.05) +
   labs(y = "Mean read depth")
-
+# Box plots of mean read depth by distance and sex
+p_distance_box <- ggplot(sort_ids_df,
+                         aes(x = Km_str, y = Mean_Read_Depth, fill = sex)) +
+  geom_boxplot(show.legend = F) +
+  labs(x = "Distance from assembly sample (km)", y = "Mean read depth")
+p1 <- ggarrange(p_sex_vio, p_distance_box, nrow = 1, widths = c(1, 2),
+                common.legend = T, legend = "right")
+# Plot read depth and aligned bases at each distance cutoff
 cutoffs <- sort(unique(sort_ids_df$Km_from_Asm))
 depth_by_cutoff <- map_dfr(
   cutoffs,
@@ -259,23 +266,39 @@ p_cutoff <- ggplot(depth_by_cutoff, aes(x = cutoff_km, y = value, color = sex)) 
   geom_point(aes(fill = sex, size = n), color = "black", shape = 21,
              alpha = 0.5) +
   labs(x = "Maximum distance from assembly sample (km)", y = "",
-       size = "Number of samples") +
+       size = "n samples") +
   facet_wrap(~ stat, scales = "free", nrow = 1) +
   scale_x_continuous(n.breaks = length(cutoffs))
+# Combine and save depth read filtering plots
+p2 <- ggarrange(p1, p_cutoff, ncol = 1)
+ggsave(depth_plot_file, p2, bg = "white", dpi = 300, height = 8, width = 10)
 
-p1 <- ggarrange(p_sex_vio, p_distance_box, nrow = 1, widths = c(1, 2))
-
-sort_ids_df %>%
-  # Minimum mean depth cutoff of 2
+# Filter dataframe to keep nearest to genome sample with highest read depth
+os_ss_df <- sort_ids_df %>%
+  # Minimum mean depth cutoff of 2 reads
   filter(Mean_Read_Depth >= 2) %>%
-  # CHOOSE PROGRAMATICALLY
-  filter(Km_from_Asm <= 65) %>%
   # Sort by least distance from ref. location & highest depth
   arrange(Km_from_Asm, desc(Mean_Read_Depth)) %>%
-  slice_head(n = 10, by = sex) %>%
-  summarize(total_bases_gb = sum(Aligned_Bases)/1e9, .by = sex)
+  # Keep 10 samples of each sex
+  slice_head(n = 10, by = sex)
+# Log filtering
+cat("Log for sex-based depth comparison filtering...\n")
+os_ss_df %>%
+  summarize(n = n(), `Sum of Aligned Bases (Gb)` = sum(Aligned_Bases)/1e9,
+            `Median of Sample Mean Read Depth` = median(Mean_Read_Depth),
+            .by = sex) %>%
+  print()
+# Get read paths
+os_ss_reads <- os_ss_df %>%
+  select(Sample) %>%
+  rowwise() %>%
+  mutate(Reads = paste(list.files(path = paste0(popgen_dir, "/trimmed_reads"),
+                                  pattern = paste0(Sample, "_"), full.names = T),
+                       collapse = ";")) %>%
+  ungroup() %>%
+  separate_longer_delim(Reads, delim = ";") %>%
+  select(Reads)
 
 # Write read files for sex-based depth comparison
 write_tsv(os_ss_df, depth_tab_file, col_names = F) # table of sample metadata
-write_tsv(os_reads, depth_reads_file, col_names = F) # paths to reads
-
+write_tsv(os_ss_reads, depth_reads_file, col_names = F) # paths to reads

@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH -J ygs_sdr
 #SBATCH -o %x_logs/%x_%j.log
-#SBATCH -p oneweek
-#SBATCH --time=7-0
-#SBATCH --mem=60g
+#SBATCH -p gpu
+#SBATCH --time=2-0
+#SBATCH --mem=100g
 #SBATCH --cpus-per-task=16
 
 # Script variables
@@ -26,7 +26,7 @@ if [[ -d "$scripts_dir" ]]; then
   ygs_pl="$scripts_dir/$ygs_pl"
 fi
 ygs_pl="$(realpath -e "$ygs_pl")"
-main_outdir="${3:-sdr_id_results}" # main output directory
+main_outdir="${2:-sdr_id_results}" # main output directory
 ygs_outdir="$main_outdir/${job_name}_results" # job type output directory
 window=500000 # window size = 500 kb
 win_str="$((window / 1000))kb" # get string from window size
@@ -55,45 +55,44 @@ Carvalho and Clark (2013) using k=$k. Reads must be from opposite sex (os)
 with respect to the assembly, with a set of same sex (ss) reads used to
 validate assembly k-mers.
 
-Usage: sbatch $job_name.sbatch <genome.fasta(.gz)> <asm_id> [main_outdir]
+Usage: sbatch $job_name.sbatch <genome.fasta(.gz)> [main_outdir]
 
 Input:
   genome.fasta(.gz)     # genome assembly FASTA
-  asm_id                # assembly sample ID
   main_outdir           # optional: main output directory (default: sdr_id_results)
 
 Output:
   $ygs_outdir/<genome>/
-      ├── ${win_str}_windows.contig_result                  # log for YGS contig mode
-      ├── ${win_str}_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers found in > 1 contig
-      ├── ${win_str}_windows.fasta.gz                       # genome FASTA split into $win_str sliding windows
-      ├── ${win_str}_windows.gen_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers
-      ├── ${win_str}_windows_os_k${k}_ss_k${k}.final_result # speaks for itself
-      ├── os_table.tsv                                      # table of sample IDs and metadata (os)
-      ├── os.txt                                            # list of read file paths (os)
-      ├── os_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (os)
-      ├── os_k$k.jf                                         # ${k}-mer Jellyfish binary hash (os)
-      ├── os_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
-      ├── os_k$k.trace_result                               # log for YGS trace mode (os)
-      ├── ss_table.tsv                                      # table of sample IDs and metadata (ss)
-      ├── ss.txt                                            # list of same sex read file paths (ss)
-      ├── ss_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (ss)
-      ├── ss_k$k.jf                                         # ${k}-mer Jellyfish binary hash (ss)
-      ├── ss_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
-      └── ss_k$k.trace_result                               # log for YGS trace mode (ss)
+  ├── ${win_str}_windows.contig_result                  # log for YGS contig mode
+  ├── ${win_str}_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers in > 1 contig
+  ├── ${win_str}_windows.fasta.gz                       # genome FASTA split into $win_str sliding windows
+  ├── ${win_str}_windows.gen_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers
+  ├── ${win_str}_windows_os_k${k}_ss_k${k}.final_result # speaks for itself
+  ├── os_table.tsv                                      # table of sample IDs and metadata (os)
+  ├── os.txt                                            # list of read file paths (os)
+  ├── os_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (os)
+  ├── os_k$k.jf                                         # ${k}-mer Jellyfish binary hash (os)
+  ├── os_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
+  ├── os_k$k.trace_result                               # log for YGS trace mode (os)
+  ├── ss_table.tsv                                      # table of sample IDs and metadata (ss)
+  ├── ss.txt                                            # list of same sex read file paths (ss)
+  ├── ss_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (ss)
+  ├── ss_k$k.jf                                         # ${k}-mer Jellyfish binary hash (ss)
+  ├── ss_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
+  └── ss_k$k.trace_result                               # log for YGS trace mode (ss)
 
 Requires:
  - seqkit v2.3.1+ (https://bioinf.shenwei.me/seqkit/)
- - R v6+ (https://www.r-project.org)
  - Jellyfish v2.3.1+ (https://github.com/gmarcais/jellyfish)
  - pigz v2.8+ (https://zlib.net/pigz/)
- - Perl v5.23.1 (https://www.perl.org/)"
+ - Perl v5.23.1 (https://www.perl.org/)
+ - R v6+ (https://www.r-project.org)"
 
 if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
   show_help
   exit 0
-elif [[ "$#" -lt 2 ]]; then
-  echo "Error: at least 2 positional arguments required."
+elif [[ "$#" -lt 1 ]]; then
+  echo "Error: at least 1 positional arguments required."
   echo
   show_help
   exit 1
@@ -133,7 +132,6 @@ nthrd="${SLURM_CPUS_PER_TASK:-1}"
 
 # Input
 genome="${1:-"assemblies/corteva_v2_ha.fa"}" # genome FASTA of one sex (e.g., female, U)
-asm_id="${2:-"SL-CT1-FG-3"}" # genome assembly ID
 
 # Output
 genome_basename="$(basename "$genome")" # genome filename basename
@@ -176,25 +174,9 @@ set -x
 { set +x; } 2>/dev/null
 check_output "$ygs_out/$genome_windows"
 echo; echo
-
-## RELOCATE TO SDR_ID JOB
-echo "Step 2: Filter for reads of opposite sex and same location as assembly sample"
-# Get assembly size
-asm_size="$(seqkit stats -j "$nthrd" -T "$genome" | tail -n+2 | cut -f5)"
 conda deactivate
-# Load R module
-module --latest load r
-Rscript --version || exit 1
-# Run Rscript
-set -x
-Rscript "$sdr_parse" "$target_cov" "$asm_size" "$asm_id" "$ygs_out"
-{ set +x; } 2>/dev/null
-check_output "$ygs_out/$os_reads_file"
-check_output "$ygs_out/$ss_reads_file"
-module purge
-echo; echo
 
-echo "Step 3: YGS method from Carvalho and Clark (2013) supplement"
+echo "Step 2: YGS method from Carvalho and Clark (2013) supplement"
 # https://genome.cshlp.org/content/genome/suppl/2013/09/24/gr.156034.113.DC1/Supplemental_Material_Ykmer_ms_SM.pdf
 # Load Jellyfish env
 conda activate jellyfish
@@ -272,7 +254,7 @@ check_output "$ygs_out/$ss_jfa"
 conda deactivate
 echo; echo
 
-echo "Step 4: Run YGS.pl"
+echo "Step 3: Run YGS.pl"
 # Activate YGS Perl env
 # mamba create -n ygs conda-forge::perl conda-forge::perl-bit-vector \
 #   conda-forge::perl-carp-clan bioconda::perl-perlio-gzip
