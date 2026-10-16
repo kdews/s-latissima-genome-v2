@@ -24,7 +24,9 @@ ygs_outdir="${ygs_job_name}_results" # output subdirectory
 # URL to YGS.pl from Carvalho and Clark (2013)
 ygs_url="https://genome.cshlp.org/content/genome/suppl/2013/09/24/gr.156034.113.DC1/YGS.txt"
 ygs_pl="YGS.pl" # local name of YGS script
-sdr_parse="sdr_parse_multiqc.R" # R script parses reads for YGS from MultiQC data
+sdr_parse="sdr_parse_multiqc.R" # R script to parse reads from MultiQC metadata
+ygs_plot="ygs_plot.sbatch" # job script to plot YGS results
+depth_plot="depth_plot.sbatch" # job script to plot depths results
 # Read depth SDR job variables
 depth_job_name="depth_sdr"
 depth_job="$depth_job_name.sbatch" # Slurm job submission script
@@ -35,6 +37,8 @@ if [[ -d "$scripts_dir" ]]; then
   ygs_pl="$scripts_dir/$ygs_pl"
   sdr_parse="$scripts_dir/$sdr_parse"
   depth_job="$scripts_dir/$depth_job"
+  ygs_plot="$scripts_dir/$ygs_plot"
+  depth_plot="$scripts_dir/$depth_plot"
 fi
 ygs_pl="$(realpath -e "$ygs_pl")"
 window=500000 # window size = 500 kb
@@ -208,8 +212,16 @@ for i in "${!genomes[@]}"; do
   module purge
 
   # Submit YGS and depth jobs
-  sbatch "$ygs_job" "${genomes[i]}" "$main_outdir"
-  sbatch "$depth_job" "${genomes[i]}" "$main_outdir"
+  set -x
+  y_id="$(sbatch --parsable "$ygs_job" "${genomes[i]}" "$main_outdir")"
+  d_id="$(sbatch --parsable "$depth_job" "${genomes[i]}" "$main_outdir")"
+  { set +x; } 2>/dev/null
+  
+  # Analyze outputs
+  set -x
+  sbatch --dependency="afterok:$y_id" "$ygs_plot" "$ygs_out" "$scripts_dir"
+  sbatch --dependency="afterok:$d_id" "$depth_plot" "$depth_out" "$scripts_dir"
+  { set +x; } 2>/dev/null
 done
 
 # Print date and time

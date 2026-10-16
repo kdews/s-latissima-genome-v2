@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH -J ygs_sdr
 #SBATCH -o %x_logs/%x_%j.log
-#SBATCH -p gpu
+#SBATCH -p htcondor
 #SBATCH --time=2-0
-#SBATCH --mem=100g
+#SBATCH --mem=59g
 #SBATCH --cpus-per-task=16
 
 # Script variables
@@ -48,7 +48,7 @@ check_output () {
 }
 
 # Help message
-show_help () 
+show_help () {
   echo "\
 Runs k-mer-based SDR identification from Barrera-Redondo et al. (2025) and 
 Carvalho and Clark (2013) using k=$k. Reads must be from opposite sex (os)
@@ -87,7 +87,7 @@ Requires:
  - pigz v2.8+ (https://zlib.net/pigz/)
  - Perl v5.23.1 (https://www.perl.org/)
  - R v6+ (https://www.r-project.org)"
-
+}
 if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
   show_help
   exit 0
