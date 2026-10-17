@@ -126,7 +126,7 @@ p_log2ratio_all <- ggplot(bias_df, aes(x = Midpoint, y = Log2_Sex_Ratio,
              labeller = labeller(n_Chr = \(x) paste("Chr", x))) +
   scale_x_continuous(name = "Position (Mb)", labels = ~ .x * 1e-6) +
   scale_y_continuous(name = str_wrap(
-    "Female vs. male log2 fold change in mean read depth per 100-kb window",
+    "Female vs. male log2 ratio of mean read depth per 100-kb window",
     width = 45)) +
   scale_color_gradient2(name = str_wrap("female log2 ratio", width = 10),
                        high = "red", mid = "black", low = "blue")
@@ -148,7 +148,7 @@ p_log2ratio_cand <- ggplot(filt_bias_df, aes(x = Midpoint, y = Log2_Sex_Ratio,
              labeller = labeller(n_Chr = \(x) paste("Chr", x))) +
   scale_x_continuous(name = "Position (Mb)", labels = ~ .x * 1e-6) +
   scale_y_continuous(name = str_wrap(
-    "Female vs. male log2 fold change in mean read depth per 100-kb window",
+    "Female vs. male log2 ratio of mean read depth per 100-kb window",
     width = 45)) +
   scale_color_gradient2(name = str_wrap("female log2 ratio", width = 10),
                        high = "red", mid = "black", low = "blue")
