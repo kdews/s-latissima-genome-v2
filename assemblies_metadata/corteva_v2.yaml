@@ -16,8 +16,6 @@ assembly:
     method: file
     locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_Genome_Polished_111925.fasta
     selector: null
-  annotation_gff: null
-  proteins_fasta: null
 reads:
   source:
     location: local

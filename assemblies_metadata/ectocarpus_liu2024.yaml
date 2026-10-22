@@ -16,8 +16,7 @@ assembly:
     method: dataverse
     locator: 10.17617/3.NQDSLW
     selector: null
-  annotation_gff: null
-  proteins_fasta: null
+  annotation_gff: Ec32_V5.reference.gff
 reads:
   source:
     location: remote

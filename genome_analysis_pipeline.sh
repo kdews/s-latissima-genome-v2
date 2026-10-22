@@ -92,6 +92,14 @@ sbatch "$scripts_dir/prog_cactus.sbatch" "$scripts_dir/$prog_seqFile"
 # Visualize resulting HAL (SCRIPT IN PROGRESS)
 sbatch "$scripts_dir/hal_visualize.sbatch"
 
+# 3. Identify genome SDR
+# CURRENT VERSION
+sbatch "$scripts_dir/sdr_id.sbatch" assemblies/corteva_v2_ha.fa 'SL-CT1-FG-3'
+sbatch "$scripts_dir/sdr_id.sbatch" assemblies/skinny_kelp.fa ''
+
+# UPDATE
+sbatch "$scripts_dir/sdr_id.sbatch" "$scripts_dir/$in_tsv"
+
 # Print date and time
 echo
 date_fmt="%-I:%M:%S %p (%a %d %b %Y)" # date format

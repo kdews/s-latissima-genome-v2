@@ -16,8 +16,7 @@ assembly:
     method: figshare
     locator: "27569472"
     selector: null
-  annotation_gff: null
-  proteins_fasta: null
+  annotation_gff: Saccharina_japonica.fix.gff3
 reads:
   source:
     location: remote

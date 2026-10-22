@@ -16,8 +16,6 @@ assembly:
     method: file
     locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Genome_Polished_013026_Illumina_Polished.fasta.gz
     selector: null
-  annotation_gff: null
-  proteins_fasta: null
 reads:
   source:
     location: local

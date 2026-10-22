@@ -22,14 +22,14 @@ DATAVERSE_API_BASE='https://edmond.mpg.de'
 # Help message
 show_help () {
   echo "\
-Usign a TSV manifest of genome metadata, copies from local or downloads from
-remote all genome FASTAs and reads. Uses curl or NCBI CLI to download genome
-FASTAs and SRA Toolkit to download WGS reads.
+Using a TSV manifest of genome metadata, copies from local or downloads from
+remote genome FASTAs, optional GFF annotations, and reads. Uses curl or NCBI
+CLI to download genome FASTAs and SRA Toolkit to download WGS reads.
 
 Usage: sbatch $job_name.sbatch <in_tsv>
 
 Required input:
-  in_tsv      TSV with 10 named columns (see below), with commented (#) header
+  in_tsv      TSV with 15 named columns (see below), with commented (#) header
 
 Input TSV columns:
   <Column_Name>           <Example>
@@ -42,9 +42,19 @@ Input TSV columns:
   7. Reads_Source         local
   8. Reads_Method         glob
   9. Reads_Type           pacbio
-  10. Reads_Locator        /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_ONT_raw_reads_Part[12].fastq
+  10. Reads_Locator       /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_ONT_raw_reads_Part[12].fastq
+  11. Annotation_GFF      annotation.gff3.gz**
+  12. Sample_ID           SL-CT1-FG3
+  13. Region              US
+  14. Sex                 V
+  15. Ploidy              1
 
-* Blank genome or read fields skip that data type for the row.
+* If no reads are available, leave all four Reads_* fields blank. The row's
+  assembly will still be retrieved, and read retrieval will be skipped.
+
+** Optional. For local assemblies, provide the full GFF path. For Figshare,
+Dataverse, or url_tar sources, provide the GFF filename. For direct URLs,
+provide either the full GFF URL or a filename beside the genome URL.
 
 Supported genome sources:
   file        local FASTA (plain or gzip-compressed)
@@ -64,6 +74,8 @@ Output:
   └── <label>.fa.fai      # FASTA index
   reads/                  # directory containing all reads
   └── <label>.fastq.gz    # renamed reads FASTQ (gzip-compressed)
+  annotations/            # directory containing available annotations
+  └── <label>.gff3        # renamed annotation GFF (uncompressed)
 
 Requires:
  - curl v8+ (https://curl.se)
@@ -98,6 +110,11 @@ SLURM_JOB_NODELIST = $SLURM_JOB_NODELIST
 TMPDIR = $TMPDIR
 =========================================="
 
+# Print date and time
+date_fmt="%-I:%M:%S %p (%a %d %b %Y)" # date format
+date +"$date_fmt"
+echo
+
 # Load conda
 module purge
 cond="$HOME/.conda_for_sbatch.sh"
@@ -118,7 +135,7 @@ in_tsv="${1:-s-latissima-genome-v2/genomes_metadata.tsv}"
 
 # Output
 work_dir="${job_name}_tmp" # temporary working directory
-mkdir -p "$work_dir" assemblies reads # create temp dir
+mkdir -p "$work_dir" assemblies reads annotations # create temp/output dirs
 parsed="$work_dir/parsed.records"
 
 # Test required packages
@@ -194,6 +211,19 @@ select_fasta () {
     | if length == 1 then .[0]
       elif length == 0 then error("no matching FASTA")
       else error("multiple matching FASTAs; set Genome_Selector")
+      end
+  '
+}
+
+# Select one GFF/GFF3 record from a Figshare or Dataverse JSON response
+select_gff () {
+  local selector="$1"
+  jq -er --arg selector "$selector" '
+    map(select(.name | test("\\.(gff|gff3)(\\.(gz|bgz))?$"; "i")))
+    | map(select((.name == $selector) or (.name | test($selector))))
+    | if length == 1 then .[0]
+      elif length == 0 then error("no matching GFF")
+      else error("multiple matching GFFs; use an exact Annotation_GFF filename")
       end
   '
 }
@@ -300,6 +330,106 @@ get_genome () {
   # Index genome FASTA
   samtools faidx "$output"
   conda deactivate
+}
+
+# Copy/decompress an annotation to a normalized, uncompressed output path
+norm_annotation () {
+  local input="$1" output="$2"
+  log "Input: $input"
+  log "Output: $output"
+  conda activate pigz
+  if pigz -t -p "$nthrd" "$input" 2>/dev/null
+  then
+    pigz -cd -p "$nthrd" -- "$input" > "$output"
+  else
+    cp -- "$input" "$output"
+  fi
+  conda deactivate
+  [[ -s "$output" ]] || die "Created empty annotation output: $output"
+  log "Successfully retrieved annotation: $output"
+}
+
+get_annotation () {
+  local label="$1" source="$2" method="$3" locator="$4" annotation_gff="$5"
+  local output="annotations/$label.gff3"
+  local download="$work_dir/$label.annotation"
+  local json record url member
+
+  log "$label: preparing annotation ($source/$method)"
+
+  # An explicit local path or URL overrides the assembly source. This permits,
+  # for example, a local GFF paired with a remotely retrieved assembly.
+  if [[ "$annotation_gff" == /* ]]
+  then
+    [[ -r "$annotation_gff" ]] \
+      || die "$label: cannot read annotation: $annotation_gff"
+    norm_annotation "$annotation_gff" "$output"
+    return
+  elif [[ "$annotation_gff" =~ ^https?:// ]]
+  then
+    module load usc curl
+    curl -fL --retry 3 --output "$download" "$annotation_gff"
+    module purge
+    norm_annotation "$download" "$output"
+    return
+  fi
+
+  case "$source:$method" in
+    local:file)
+      [[ -r "$annotation_gff" ]] \
+        || die "$label: cannot read annotation: $annotation_gff"
+      norm_annotation "$annotation_gff" "$output"
+      ;;
+    remote:url)
+      url="${locator%/*}/$annotation_gff"
+      module load usc curl
+      curl -fL --retry 3 --output "$download" "$url"
+      module purge
+      norm_annotation "$download" "$output"
+      ;;
+    remote:url_tar)
+      module load usc curl
+      curl -fL --retry 3 --output "$download.tar" "$locator"
+      module purge
+      tar -tf "$download.tar" \
+        | awk -v name="$annotation_gff" 'BEGIN { FS="/" } $NF == name' \
+        > "$work_dir/annotation_members"
+      mapfile -t members < "$work_dir/annotation_members"
+      (( ${#members[@]} == 1 )) \
+        || die "$label: expected one GFF named $annotation_gff; found ${#members[@]}"
+      member="${members[0]}"
+      tar -xOf "$download.tar" "$member" > "$download"
+      norm_annotation "$download" "$output"
+      ;;
+    remote:figshare)
+      module load usc curl jq
+      json="$(curl -fsSL --retry 3 "https://api.figshare.com/v2/articles/$locator/files")"
+      record="$(jq -ce '[.[] | {name: .name, url: .download_url}]' <<<"$json" \
+        | select_gff "$annotation_gff")" \
+        || die "$label: could not select one Figshare GFF"
+      url="$(jq -r .url <<<"$record")"
+      curl -fL --retry 3 --output "$download" "$url"
+      module purge
+      norm_annotation "$download" "$output"
+      ;;
+    remote:dataverse)
+      module load usc curl jq
+      json="$(curl -fsSL --retry 3 \
+        "$DATAVERSE_API_BASE/api/datasets/:persistentId/?persistentId=doi:$locator")"
+      record="$(jq -ce --arg base "$DATAVERSE_API_BASE" '
+        [.data.latestVersion.files[].dataFile
+          | {name: .filename, url: ($base + "/api/access/datafile/" + (.id | tostring))}]
+      ' <<<"$json" | select_gff "$annotation_gff")" \
+        || die "$label: could not select one Dataverse GFF"
+      url="$(jq -r .url <<<"$record")"
+      curl -fL --retry 3 --output "$download" "$url"
+      module purge
+      norm_annotation "$download" "$output"
+      ;;
+    *)
+      die "$label: annotations are unsupported for source/method: $source/$method"
+      ;;
+  esac
 }
 
 # Compress FASTQ input (if needed) and append to output file
@@ -417,14 +547,14 @@ get_reads () {
 }
 
 # Check TSV column names
-exp_header=$'# Label\tPretty_Label\tGenome_Source\tGenome_Method\tGenome_Locator\tGenome_Selector\tReads_Source\tReads_Method\tReads_Type\tReads_Locator'
+exp_header=$'# Label\tPretty_Label\tGenome_Source\tGenome_Method\tGenome_Locator\tGenome_Selector\tReads_Source\tReads_Method\tReads_Type\tReads_Locator\tAnnotation_GFF\tSample_ID\tRegion\tSex\tPloidy'
 IFS= read -r header < "$in_tsv" # read just first line of TSV
 header="${header%$'\r'}" # strip carriage return
 [[ "$header" == "$exp_header" ]] || die "Expected TSV header: $exp_header"
 # Verify TSV format
 awk -F '\t' '
-  NR > 1 && $0 !~ /^#/ && NF > 0 && NF != 10 {
-    printf "ERROR: line %d has %d TSV columns; expected 10\n", NR, NF > "/dev/stderr"
+  NR > 1 && $0 !~ /^#/ && NF > 0 && NF != 15 {
+    printf "ERROR: line %d has %d TSV columns; expected 15\n", NR, NF > "/dev/stderr"
     bad = 1
   }
   END { exit bad }
@@ -432,7 +562,7 @@ awk -F '\t' '
 # Parse TSV using file separator IFS for "read"
 awk -F '\t' -v OFS='\034' '
   NR > 1 && $0 !~ /^#/ && NF > 0 {
-    print $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    print $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
   }
 ' "$in_tsv" > "$parsed"
 
@@ -440,10 +570,12 @@ awk -F '\t' -v OFS='\034' '
 declare -A seen_labels=()
 while IFS=$'\034' read -r label pretty_label genome_source genome_method \
   genome_locator genome_selector reads_source reads_method reads_type \
-  reads_locator extra
+  reads_locator annotation_gff sample_id region sex ploidy extra
 do
   label="${label%$'\r'}"
   reads_locator="${reads_locator%$'\r'}"
+  annotation_gff="${annotation_gff%$'\r'}"
+  ploidy="${ploidy%$'\r'}"
   [[ -n "$label" ]] || continue
   [[ "$label" != \#* ]] || continue
   [[ "$label" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "Invalid label: $label"
@@ -467,20 +599,43 @@ do
     fi
   fi
 
-  # Strip version from label (same reads for all versions)
-  clean_label="${label%%_v[0-9]*}"
-  # Skip reads download if read FASTQ(s) exist in reads/
-  if [[ -f "reads/${clean_label}_$reads_type.fastq.gz" || \
-    -f "reads/${clean_label}_1.fastq.gz" && -f "reads/${clean_label}_2.fastq.gz" ]]
+  # Fetch annotation when one is specified and normalized output is absent
+  if [[ -n "$annotation_gff" ]]
   then
-    log "Already retrieved $reads_type reads for $clean_label. Skipping..."
+    if [[ -f "annotations/$label.gff3" ]]
+    then
+      log "Already retrieved annotation for $label. Skipping..."
+    else
+      log "Getting annotation for $label..."
+      get_annotation "$label" "$genome_source" "$genome_method" \
+        "$genome_locator" "$annotation_gff"
+    fi
+  fi
+
+  # Read metadata must be either complete or entirely blank
+  read_fields=("$reads_source" "$reads_method" "$reads_type" "$reads_locator")
+  n_read_fields=0
+  for field in "${read_fields[@]}"
+  do
+    [[ -n "$field" ]] && (( n_read_fields += 1 ))
+  done
+  (( n_read_fields == 0 || n_read_fields == 4 )) \
+    || die "$label: Reads_Source, Reads_Method, Reads_Type, and Reads_Locator must all be filled or all be blank"
+
+  if (( n_read_fields == 0 ))
+  then
+    log "$label: no reads specified. Skipping read retrieval..."
   else
-    # Fetch assembly reads
-    if [[ -n "$reads_source" || -n "$reads_method" || -n "$reads_type" \
-      || -n "$reads_locator" ]]; then
+    # Strip version from label (same reads for all versions)
+    clean_label="${label%%_v[0-9]*}"
+    # Skip reads download if read FASTQ(s) exist in reads/
+    if [[ -f "reads/${clean_label}_$reads_type.fastq.gz" || \
+      -f "reads/${clean_label}_1.fastq.gz" && -f "reads/${clean_label}_2.fastq.gz" ]]
+    then
+      log "Already retrieved $reads_type reads for $clean_label. Skipping..."
+    else
+      # Fetch assembly reads
       log "Getting $reads_type reads for $clean_label..."
-      [[ -n "$reads_source" && -n "$reads_method" && -n "$reads_type" \
-        && -n "$reads_locator" ]] || die "$label: incomplete read fields"
       get_reads "$clean_label" "$reads_source" "$reads_method" "$reads_type" "$reads_locator"
     fi
   fi
@@ -492,12 +647,10 @@ rm -rf -- "$work_dir"
 # Log output
 echo
 echo "Finished. Output:"
-tree -A assemblies reads
+tree -A assemblies reads annotations
 
 # Print date and time
 echo
 date_fmt="%-I:%M:%S %p (%a %d %b %Y)" # date format
 date +"$date_fmt"
 echo
-
-

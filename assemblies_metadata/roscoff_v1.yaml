@@ -16,8 +16,7 @@ assembly:
     method: url_tar
     locator: https://phaeoexplorer.sb-roscoff.fr/download/Saccharina-latissima.tar.gz
     selector: Saccharina-latissima_FEMALE.fa
-  annotation_gff: null
-  proteins_fasta: null
+  annotation_gff: Saccharina-latissima_FEMALE.gff
 reads:
   source:
     location: remote

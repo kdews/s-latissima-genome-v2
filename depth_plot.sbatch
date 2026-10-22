@@ -28,16 +28,17 @@ genome assembly (Barrera-Redondo et al. 2025).
 Usage: sbatch $job_name.sbatch <depth_out> [out_dir]
 
 Input:
-  depth_out     path to depth output directory for specific genome
+  depth_out   path to depth output directory for specific genome
   out_dir     output directory for plot images (optional)
 
 Output:
-  <depth_out>/
-  ├── 
-  ├── 
-  ├── 
-  ├── 
-  └── 
+ $scripts_dir/
+  └── figures/
+      ├── depth_all_<genome>.png
+      ├── depth_candidate_<genome>.png
+      ├── depth_diff_all_<genome>.png
+      ├── depth_log2_all_<genome>.png
+      └── depth_log2_candidate_<genome>.png
 
 Requires:
  - R v6+ (https://www.r-project.org)"

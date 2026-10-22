@@ -16,8 +16,6 @@ assembly:
     method: ncbi
     locator: GCA_034768055.1
     selector: null
-  annotation_gff: null
-  proteins_fasta: null
 reads:
   source:
     location: remote

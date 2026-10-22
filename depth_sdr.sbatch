@@ -49,16 +49,23 @@ Input:
 
 Output:
   $depth_outdir/<genome>/
-  └── bams/
-      ├── <indiv_1>.sorted.bam
-      └── <indiv_n>.sorted.bam
-  └── mosdepth/
-      ├── <indiv_1>.
-      └── <indiv_n>.
-  ├── 
-  ├── 
-  ├── 
-  └── 
+      └── <genome>/
+          ├── <genome>.0123                          # bwa-mem2 index files
+          ├── <genome>.amb                           # bwa-mem2 index files
+          ├── <genome>.ann                           # bwa-mem2 index files
+          ├── <genome>.bwt.2bit.64                   # bwa-mem2 index files
+          ├── bams/                                  # individual-level BAMs
+          │   ├── <indiv_n>.sorted.bam
+          │   ├── <indiv_n>.sorted.bam.bai
+          │   └── ...
+          ├── mosdepth/                              # mosdepth result files
+          │   ├── <indiv_n>.mosdepth.global.dist.txt  
+          │   ├── <indiv_n>.mosdepth.region.dist.txt
+          │   ├── <indiv_n>.mosdepth.summary.txt
+          │   ├── <indiv_n>.regions.bed.gz
+          │   ├── <indiv_n>.regions.bed.gz.csi
+          │   └── ...
+          └── depth_filt.png                         # plots of sample read depths
 
 Requires:
  - bwa-mem2 v2.3 (https://github.com/bwa-mem2/bwa-mem2)

@@ -40,7 +40,6 @@ if [[ -d "$scripts_dir" ]]; then
   ygs_plot="$scripts_dir/$ygs_plot"
   depth_plot="$scripts_dir/$depth_plot"
 fi
-ygs_pl="$(realpath -e "$ygs_pl")"
 window=500000 # window size = 500 kb
 win_str="$((window / 1000))kb" # get string from window size
 k=15 # k-mer size = 15
@@ -70,11 +69,17 @@ Carvalho and Clark (2013) using k=$k. Reads must be from opposite sex (os)
 with respect to the assembly, with a set of same sex (ss) reads used to
 validate assembly k-mers.
 
-Usage: sbatch $job_name.sbatch <genome.fasta(.gz)> <asm_id>
+Usage: sbatch $job_name.sbatch [genomes_metadata.tsv]
 
 Input:
-  asm_id                assembly sample ID
-  genome.fasta(.gz)     genome assembly FASTA
+  genomes_metadata.tsv  15-column assembly metadata TSV generated from the
+                        per-assembly YAML files. Defaults to
+                        s-latissima-genome-v2/genomes_metadata.tsv when that
+                        path exists, otherwise genomes_metadata.tsv.
+
+The script reads Label and Sample_ID by column name and analyzes the normalized
+assembly at assemblies/<Label>.fa. Region, Sex, and Ploidy are also parsed and
+reported in the log.
 
 Output:
   $main_outdir/
@@ -97,12 +102,34 @@ Output:
   │       ├── ss_k$k.jf                                         # ${k}-mer Jellyfish binary hash (ss)
   │       ├── ss_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
   │       └── ss_k$k.trace_result                               # log for YGS trace mode (ss)
-  └── $depth_outdir/
-      ├── 
-      ├── 
-      ├── 
-      ├── 
-      └── 
+  ├── $depth_outdir/
+  │   └── <genome>/
+  │       ├── <genome>.0123                                     # bwa-mem2 index files
+  │       ├── <genome>.amb                                      # bwa-mem2 index files
+  │       ├── <genome>.ann                                      # bwa-mem2 index files
+  │       ├── <genome>.bwt.2bit.64                              # bwa-mem2 index files
+  │       ├── bams/                                             # individual-level BAMs
+  │       │   ├── <indiv_n>.sorted.bam
+  │       │   ├── <indiv_n>.sorted.bam.bai
+  │       │   └── ...
+  │       ├── mosdepth/                                         # mosdepth result files
+  │       │   ├── <indiv_n>.mosdepth.global.dist.txt
+  │       │   ├── <indiv_n>.mosdepth.region.dist.txt
+  │       │   ├── <indiv_n>.mosdepth.summary.txt
+  │       │   ├── <indiv_n>.regions.bed.gz
+  │       │   ├── <indiv_n>.regions.bed.gz.csi
+  │       │   └── ...
+  │       └── depth_filt.png                                    # plots of sample read depths
+  └── $scripts_dir/
+      └── figures/
+          ├── depth_all_<genome>.png
+          ├── depth_candidate_<genome>.png
+          ├── depth_diff_all_<genome>.png
+          ├── depth_log2_all_<genome>.png
+          ├── depth_log2_candidate_<genome>.png
+          ├── ygs_all_<genome>.png
+          └── ygs_candidate_<genome>.png
+
 
 Requires:
  - seqkit v2.3.1+ (https://bioinf.shenwei.me/seqkit/)
@@ -117,11 +144,11 @@ Requires:
 if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
   show_help
   exit 0
-# elif [[ "$#" -ne 1 ]]; then
-#   echo "Error: 1 positional argument required."
-#   echo
-#   show_help
-#   exit 1
+elif [[ "$#" -gt 1 ]]; then
+  echo "Error: at most 1 positional argument is allowed."
+  echo
+  show_help
+  exit 1
 fi
 
 # Catch status codes in pipes
@@ -153,17 +180,84 @@ echo
 # Multithread support
 nthrd="${SLURM_CPUS_PER_TASK:-1}"
 
-# Download YGS.pl to scripts_dir (if needed)
-[[ -f "$ygs_pl" ]] || wget -O "$ygs_pl" "$ygs_url"
-
 # Input
-genome="${1:-"assemblies/corteva_v2_ha.fa"}" # genome FASTA of one sex (e.g., female, U)
-asm_id="${2:-"SL-CT1-FG-3"}" # genome assembly ID
-genomes=("$genome")
-asm_ids=("$asm_id")
+if [[ -n ${1:-} ]]; then
+  metadata_tsv="$1"
+elif [[ -f "$scripts_dir/genomes_metadata.tsv" ]]; then
+  metadata_tsv="$scripts_dir/genomes_metadata.tsv"
+else
+  metadata_tsv="genomes_metadata.tsv"
+fi
+assemblies_dir="assemblies"
+[[ -r "$metadata_tsv" ]] \
+  || { echo "Error: cannot read metadata TSV: $metadata_tsv" >&2; exit 1; }
+
+# Download YGS.pl to scripts_dir (if needed), then resolve its absolute path
+[[ -f "$ygs_pl" ]] || wget -O "$ygs_pl" "$ygs_url"
+ygs_pl="$(realpath -e "$ygs_pl")" || exit 1
+
+# Parse required fields by header name rather than fixed column position. Use a
+# non-tab record separator so blank TSV fields remain aligned in Bash.
+mkdir -p "$main_outdir"
+metadata_records="$main_outdir/genome_metadata.records"
+awk -F '\t' -v OFS='\034' '
+  NR == 1 {
+    sub(/\r$/, "")
+    for (i = 1; i <= NF; i++) {
+      name = $i
+      sub(/^#[[:space:]]*/, "", name)
+      column[name] = i
+    }
+    required[1] = "Label"
+    required[2] = "Sample_ID"
+    required[3] = "Region"
+    required[4] = "Sex"
+    required[5] = "Ploidy"
+    for (i = 1; i <= 5; i++) {
+      if (!(required[i] in column)) {
+        printf "ERROR: metadata TSV is missing column: %s\n", required[i] > "/dev/stderr"
+        bad = 1
+      }
+    }
+    if (bad) exit 1
+    next
+  }
+  $0 !~ /^#/ && NF > 0 {
+    sub(/\r$/, "")
+    print $column["Label"], $column["Sample_ID"], $column["Region"], \
+          $column["Sex"], $column["Ploidy"]
+  }
+' "$metadata_tsv" > "$metadata_records" || exit 1
+
+[[ -s "$metadata_records" ]] \
+  || { echo "Error: metadata TSV contains no genome records" >&2; exit 1; }
 
 # Iterate through genomes
-for i in "${!genomes[@]}"; do
+declare -A seen_labels=()
+while IFS=$'\034' read -r label asm_id region sex ploidy extra; do
+  ploidy="${ploidy%$'\r'}"
+  [[ -n "$label" ]] || continue
+  [[ "$label" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+    || { echo "Error: invalid assembly label: $label" >&2; exit 1; }
+  [[ -z ${seen_labels[$label]+x} ]] \
+    || { echo "Error: duplicate assembly label: $label" >&2; exit 1; }
+  seen_labels[$label]=1
+  [[ -z ${extra:-} ]] \
+    || { echo "Error: unexpected fields while parsing $label" >&2; exit 1; }
+  [[ -n "$asm_id" ]] \
+    || { echo "Error: $label has a blank Sample_ID" >&2; exit 1; }
+
+  genome="$assemblies_dir/$label.fa"
+  [[ -r "$genome" ]] \
+    || { echo "Error: cannot read genome for $label: $genome" >&2; exit 1; }
+
+  echo
+  echo "Assembly: $label"
+  echo "Sample ID: $asm_id"
+  echo "Region: $region"
+  echo "Sex: $sex"
+  echo "Ploidy: $ploidy"
+
   # Output
   genome_basename="$(basename "$genome")" # genome filename basename
   genome_base="${genome_basename%%.fa*}" # genome filename base
@@ -213,8 +307,8 @@ for i in "${!genomes[@]}"; do
 
   # Submit YGS and depth jobs
   set -x
-  y_id="$(sbatch --parsable "$ygs_job" "${genomes[i]}" "$main_outdir")"
-  d_id="$(sbatch --parsable "$depth_job" "${genomes[i]}" "$main_outdir")"
+  y_id="$(sbatch --parsable "$ygs_job" "$genome" "$main_outdir")"
+  d_id="$(sbatch --parsable "$depth_job" "$genome" "$main_outdir")"
   { set +x; } 2>/dev/null
   
   # Analyze outputs
@@ -222,7 +316,7 @@ for i in "${!genomes[@]}"; do
   sbatch --dependency="afterok:$y_id" "$ygs_plot" "$ygs_out" "$scripts_dir"
   sbatch --dependency="afterok:$d_id" "$depth_plot" "$depth_out" "$scripts_dir"
   { set +x; } 2>/dev/null
-done
+done < "$metadata_records"
 
 # Print date and time
 echo

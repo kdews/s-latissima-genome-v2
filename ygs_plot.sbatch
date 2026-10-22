@@ -28,28 +28,14 @@ Barrera-Redondo et al. 2025).
 Usage: sbatch $job_name.sbatch <ygs_out> [outdir]
 
 Input:
-  ygs_out     path to YGS output directory for specific genome
+  ygs_out    path to YGS output directory for specific genome
   outdir     output directory for plot images (optional)
 
 Output:
-  <ygs_out>/
-  ├── ${win_str}_windows.contig_result                  # log for YGS contig mode
-  ├── ${win_str}_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers in > 1 contig
-  ├── ${win_str}_windows.fasta.gz                       # genome FASTA split into $win_str sliding windows
-  ├── ${win_str}_windows.gen_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers
-  ├── ${win_str}_windows_os_k${k}_ss_k${k}.final_result # speaks for itself
-  ├── os_table.tsv                                      # table of sample IDs and metadata (os)
-  ├── os.txt                                            # list of read file paths (os)
-  ├── os_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (os)
-  ├── os_k$k.jf                                         # ${k}-mer Jellyfish binary hash (os)
-  ├── os_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
-  ├── os_k$k.trace_result                               # log for YGS trace mode (os)
-  ├── ss_table.tsv                                      # table of sample IDs and metadata (ss)
-  ├── ss.txt                                            # list of same sex read file paths (ss)
-  ├── ss_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (ss)
-  ├── ss_k$k.jf                                         # ${k}-mer Jellyfish binary hash (ss)
-  ├── ss_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
-  └── ss_k$k.trace_result                               # log for YGS trace mode (ss)
+ $scripts_dir/
+  └── figures/
+      ├── ygs_all_<genome>.png
+      └── ygs_candidate_<genome>.png
 
 Requires:
  - R v6+ (https://www.r-project.org)"

@@ -78,6 +78,14 @@ parse_yaml <- function(file) {
   label <- scalar_text(get_field(record, file, "label"), file, "label")
   pretty_label <- scalar_text(get_field(record, file, "pretty_label"),
                               file, "pretty_label")
+  sample_id <- scalar_text(get_field(record, file, "sample", "id"),
+                           file, "sample.id")
+  region <- scalar_text(get_field(record, file, "sample", "region"),
+                        file, "sample.region")
+  sex <- scalar_text(get_field(record, file, "sample", "sex"),
+                     file, "sample.sex")
+  ploidy <- scalar_text(get_field(record, file, "sample", "ploidy"),
+                        file, "sample.ploidy")
   genome_location <- tolower(scalar_text(get_field(record, file, "assembly",
                                                    "source", "location"),
                                          file, "assembly.source.location"))
@@ -94,24 +102,44 @@ parse_yaml <- function(file) {
   }
   genome_selector <- scalar_text(assembly_source$selector, file,
                                  "assembly.source.selector", required = F)
-  reads_location <- tolower(scalar_text(get_field(record, file, "reads",
-                                                  "source", "location"),
-                                        file, "reads.source.location"))
-  reads_method <- tolower(scalar_text(get_field(record, file, "reads", "source",
-                                                "method"),
-                                      file, "reads.source.method"))
-  reads_locator <- locator_text(get_field(record, file, "reads", "source",
-                                          "locator"),
-                                file, "reads.source.locator")
-  reads_type <- tolower(scalar_text(get_field(record, file, "reads", "platform"),
-                                    file, "reads.platform"))
-  if (reads_method == "sra") {
-    accessions <- trimws(strsplit(reads_locator, ",", fixed = T)[[1]])
-    invalid <- accessions[!grepl("^[SED]RR[0-9]+$", accessions)]
-    if (length(invalid) > 0) {
-      metadata_error(file, "reads.source.locator",
-                     paste0("invalid SRA run accession(s): ",
-                            paste(invalid, collapse = ", ")))
+  # annotation_gff is optional. Its interpretation follows assembly.source:
+  # a full path for local/file, or a filename for supported remote sources.
+  annotation_gff <- scalar_text(record$assembly$annotation_gff, file,
+                                "assembly.annotation_gff", required = F)
+  # The reads block is optional. If it is absent or null, leave all four read
+  # columns blank so downstream scripts can skip read retrieval for this row.
+  reads_location <- ""
+  reads_method <- ""
+  reads_locator <- ""
+  reads_type <- ""
+  if (!is.null(record$reads)) {
+    if (!is.list(record$reads)) {
+      metadata_error(file, "reads", "must be a mapping or null")
+    }
+    reads_location <- tolower(scalar_text(
+      get_field(record, file, "reads", "source", "location"),
+      file, "reads.source.location"
+    ))
+    reads_method <- tolower(scalar_text(
+      get_field(record, file, "reads", "source", "method"),
+      file, "reads.source.method"
+    ))
+    reads_locator <- locator_text(
+      get_field(record, file, "reads", "source", "locator"),
+      file, "reads.source.locator"
+    )
+    reads_type <- tolower(scalar_text(
+      get_field(record, file, "reads", "platform"),
+      file, "reads.platform"
+    ))
+    if (reads_method == "sra") {
+      accessions <- trimws(strsplit(reads_locator, ",", fixed = T)[[1]])
+      invalid <- accessions[!grepl("^[SED]RR[0-9]+$", accessions)]
+      if (length(invalid) > 0) {
+        metadata_error(file, "reads.source.locator",
+                       paste0("invalid SRA run accession(s): ",
+                              paste(invalid, collapse = ", ")))
+      }
     }
   }
   # Combine fields into data frame
@@ -126,6 +154,11 @@ parse_yaml <- function(file) {
     Reads_Method = reads_method,
     Reads_Type = reads_type,
     Reads_Locator = reads_locator,
+    Annotation_GFF = annotation_gff,
+    Sample_ID = sample_id,
+    Region = region,
+    Sex = sex,
+    Ploidy = ploidy,
     check.names = F,
     stringsAsFactors = F
   )
@@ -136,7 +169,7 @@ parse_yaml <- function(file) {
 # Only take command line input if not running interactively
 if (interactive()) {
   # Set working dir
-  wd <- "/scratch1/kdeweese/corteva_genome"
+  wd <- "/scratch2/kdeweese/corteva_genome"
   setwd(wd)
   yaml_dir <- "s-latissima-genome-v2/assemblies_metadata"
   out_tsv <- "s-latissima-genome-v2/genomes_metadata.tsv"
