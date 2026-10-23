@@ -7,32 +7,6 @@ library(geosphere)
 library(ggpubr)
 
 
-## Functions
-# Annotate dataframe with metadata, where column "label" contains individual IDs
-metaDf <- function(df, label) {
-  sex_convert <- c("FG" = "female", "MG" = "male")
-  subsp_convert <- c("SL" = "latissima", "SA" = "angustissima")
-  # Extract metadata from sample IDs
-  df_annot <- df %>%
-    mutate(
-      rename_id = gsub("LIS-F1-3", "SL-SNE-1-FG-3", .data[[label]]),
-      rename_id = gsub("CT1", "CT1-0", rename_id),
-      rename_id = gsub("Female", "FG-0", rename_id)
-    ) %>%
-    separate_wider_delim(
-      rename_id, delim = "-",
-      names = c("subspecies", "pop", "n_samp", "sex", "n_gam")
-    ) %>%
-    mutate(
-      subspecies = subsp_convert[subspecies],
-      sex = sex_convert[sex]
-    ) %>%
-    # Merge with table of population code metadata
-    left_join(pop_codes, by = join_by(pop == Abbreviation))
-  return(df_annot)
-}
-
-
 ## Input
 # Only take command line input if not running interactively
 if (interactive()) {
@@ -42,13 +16,15 @@ if (interactive()) {
   # Target coverage of genome with reads
   target_cov <- 25
   # Genome assembly size (in bp)
-  # asm_size <- 653974634 # corteva_v2_ha
-  asm_size <- 712691060 # corteva_v2
+  asm_size <- 653974634 # corteva_v2_ha
+  # asm_size <- 712691060 # corteva_v2
   # Genome assembly ID
   asm_id <- "SL-CT1-FG-3"
   # Output directories
   ygs_out <- "sdr_id_results/ygs_sdr_results/corteva_v2_ha"
   depth_out <- "sdr_id_results/depth_sdr_results/corteva_v2_ha"
+  # Scripts directory
+  scripts_dir <- "s-latissima-genome-v2"
 } else {
   line_args <- commandArgs(trailingOnly = T)
   target_cov <- line_args[1]
@@ -56,7 +32,20 @@ if (interactive()) {
   asm_id <- line_args[3]
   ygs_out <- line_args[4]
   depth_out <- line_args[5]
+  scripts_dir <- line_args[6]
 }
+# Metadata annotation
+pop_codes_file <- "Saccharina_pop_codes_WHOI.csv" # S. latissima population info
+metaDf_file <- "metaDf.R" # R script that contains 'metaDf' 
+# Source from scripts directory, if exists
+if (dir.exists(scripts_dir)) {
+  pop_codes_file <- file.path(scripts_dir, pop_codes_file)
+  metaDf_file <- file.path(scripts_dir, metaDf_file)
+}
+source(metaDf_file)
+# Import population codes
+pop_codes <- read_csv(pop_codes_file, show_col_types = F)
+# Convert numeric inputs
 target_cov <- as.numeric(target_cov)
 asm_size <- as.numeric(asm_size)
 # Directory containing popgen results
@@ -76,12 +65,6 @@ mqc_stats_file <- list.files(path = mqc_dir,
 aln_file <- list.files(path = mqc_dir,
                        pattern = "picard_alignment_summary_Aligned_Bases.txt",
                        recursive = T, full.names = T)
-# Directory containing VCF analysis
-vcf_dir <- "/project2/noujdine_61/kdeweese/latissima/compare_vcfs/compare-s-lat-vcfs"
-# S. latissima population codes CSV
-pop_codes_file <- list.files(path = vcf_dir, recursive = T,
-                             pattern = "Saccharina_pop_codes_WHOI.csv",
-                             full.names = T)
 
 
 ## Output
@@ -106,6 +89,7 @@ if (dir.exists(depth_out)) {
   depth_reads_file <- file.path(depth_out, depth_reads_file)
 }
 
+
 ## Data filtering
 # Filter MultiQC general stats table for relevant columns
 mqc_raw <- read_tsv(mqc_stats_file, show_col_types = F)
@@ -121,10 +105,9 @@ aln_df <- read_tsv(aln_file, show_col_types = F) %>%
   rename(Aligned_Bases = `Aligned Bases`)
 ids_df <- mqc_df %>%
   left_join(aln_df, by = join_by(Sample))
-# Import population codes
-pop_codes <- read_csv(pop_codes_file, show_col_types = F)
 # Annotate full data frame with metadata
-ids_df <- metaDf(ids_df, "Sample")
+ids_df <- metaDf(ids_df, "Sample", pop_codes)
+
 
 ## Assembly metadata matching
 # Keep only samples from assembly sample location
@@ -219,7 +202,7 @@ sort_ids_df <- ids_df %>%
   rowwise() %>%
   # Use Haversine formula to compute distances (in km)
   mutate(Km_from_Asm = distHaversine(c(asm_df$Longitude, asm_df$Latitude),
-                                       c(Longitude, Latitude)) / 1e3,
+                                     c(Longitude, Latitude)) / 1e3,
          Km_str = as.character(round(Km_from_Asm))) %>%
   ungroup() %>%
   arrange(Km_from_Asm) %>%

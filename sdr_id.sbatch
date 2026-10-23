@@ -279,7 +279,7 @@ while IFS=$'\034' read -r label asm_id region sex ploidy extra; do
   Rscript --version || exit 1
   # Run Rscript
   set -x
-  Rscript "$sdr_parse" "$target_cov" "$asm_size" "$asm_id" "$ygs_out" "$depth_out"
+  Rscript "$sdr_parse" "$target_cov" "$asm_size" "$asm_id" "$ygs_out" "$depth_out" "$scripts_dir"
   { set +x; } 2>/dev/null
   check_output "$ygs_out/$os_reads_file"
   check_output "$ygs_out/$ss_reads_file"

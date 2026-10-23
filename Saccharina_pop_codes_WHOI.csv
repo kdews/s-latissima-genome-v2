@@ -1,0 +1,51 @@
+Abbreviation,Location,State,Region,Latitude,Longitude,Source
+LD,Lubec Dock,ME,GOM,44.86168,-66.9821,mao_2020; sugar_kelp_base
+LL,Lubec Light,ME,GOM,44.841152,-66.97825,mao_2020; sugar_kelp_base
+SF,Sulivans Falls,NA,GOM,44.51997,-68.220695,sugar_kelp_base
+DI,Downeast Institute,ME,GOM,44.48009,-67.59906,mao_2020; sugar_kelp_base
+HB,Little Harbor Brook,NA,GOM,44.288616,-68.26592,sugar_kelp_base
+MD,Mount Desert Rock,ME,GOM,43.968613,-68.12834,mao_2020; sugar_kelp_base
+OI,Orr's Island,ME,GOM,43.79541,-69.94545,mao_2020; sugar_kelp_base
+PL,Pond Ledge Lagoon,NA,GOM,43.725998,-69.97511,sugar_kelp_base
+LE,Pond Ledge East,NA,GOM,43.72457,-69.97467,sugar_kelp_base
+GS,Giant's Staircase,ME,GOM,43.72373,-69.99336,mao_2020; sugar_kelp_base
+DW,Outside Driftwood,NA,GOM,43.72039,-69.99717,sugar_kelp_base
+HI,Haskell Island,NA,GOM,43.720383,-70.04023,sugar_kelp_base
+AF,Atlantic Seafarms,NA,GOM,43.71652,-69.99905,sugar_kelp_base
+JL,Jaquesh Ledge,NA,GOM,43.71649,-70.00044,sugar_kelp_base
+GM,Great Mark,NA,GOM,43.714153,-70.02826,sugar_kelp_base
+CB,Casco Bay,NA,GOM,43.711826,-70.18805,sugar_kelp_base
+HR,Haddock Rock,NA,GOM,43.711815,-70.04182,sugar_kelp_base
+LM,Little Mark,NA,GOM,43.708168,-70.03178,sugar_kelp_base
+WR,Whale Rock,NA,GOM,43.70443,-70.03718,sugar_kelp_base
+ME,Simonton Cove,ME,GOM,43.642928,-70.224887,extra
+NL,Nubble Light,ME,GOM,43.16692,-70.59145,mao_2020; sugar_kelp_base
+OD,UNH Dock,NA,GOM,43.07221,-70.71047,sugar_kelp_base
+GOM,Gulf of Maine,NA,GOM,43.06897,-70.7089,sugar_kelp_base
+UNH,UNH,NA,GOM,43.068966,-70.7089,sugar_kelp_base
+JS,Fort Stark,NH,GOM,43.059444,-70.71174,mao_2020; sugar_kelp_base
+NC,Newcastle,NH,GOM,43.05767,-70.72742,mao_2020; sugar_kelp_base
+IS,Isles of Shoals,NH,GOM,42.987415,-70.6173,mao_2020; sugar_kelp_base
+BT,Cornell Biotech,NA,GOM,42.44619,-76.478195,sugar_kelp_base
+MB,Minot Beach,NA,GOM,42.24115,-70.759094,sugar_kelp_base
+DSK,Duxbury Sugar Kelp,NA,GOM,42.016884,-70.642715,sugar_kelp_base
+CC,Cape Cod,MA,GOM,41.77382,-70.49945,mao_2020; sugar_kelp_base
+BB,Buzzards Bay,NA,SNE,41.73941,-70.62518,sugar_kelp_base
+AZ,SNE AZ,NA,SNE,41.6145,-71.27351,sugar_kelp_base
+WHOI,WHOI,NA,SNE,41.52413,-70.67133,sugar_kelp_base
+FW,Fort Wetherill,RI,SNE,41.477127,-71.36107,mao_2020; sugar_kelp_base
+LR,Lone Rock,NA,SNE,41.46122,-70.85502,sugar_kelp_base
+DB,Devils Bridge,NA,SNE,41.360157,-70.84216,sugar_kelp_base
+PI,Pine Island,CT,SNE,41.312122,-72.06127,mao_2020; sugar_kelp_base
+SU,SNE SU,NA,SNE,41.311817,-71.94438,sugar_kelp_base
+BL,Black Ledge,CT,SNE,41.30745,-72.07054,mao_2020; sugar_kelp_base
+CT1,Black Ledge,CT,SNE,41.30745,-72.07054,extra
+FI,Fisher's Island,NY,SNE,41.282352,-71.93066,mao_2020; sugar_kelp_base
+TI,Thimble Island,NA,SNE,41.25728,-72.76588,sugar_kelp_base
+SNE,Southern New England,NA,SNE,41.257206,-72.76601,sugar_kelp_base
+GW,SNE GW,NA,SNE,41.25662,-72.76625,sugar_kelp_base
+BS,BRASTEC,NA,SNE,41.15427,-73.192154,sugar_kelp_base
+UCONN,University of Connecticut,NA,SNE,41.05343,-73.538734,sugar_kelp_base
+MOR,Moriches,NA,SNE,40.78321,-72.780205,sugar_kelp_base
+MO,Moriches Bay,NA,SNE,40.78228,-72.779724,sugar_kelp_base
+VIMS,Virginia Institute of Marine Science,NA,SNE,37.59403,-75.63264,sugar_kelp_base

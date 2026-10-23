@@ -24,7 +24,8 @@ show_help () {
   echo "\
 Using a TSV manifest of genome metadata, copies from local or downloads from
 remote genome FASTAs, optional GFF annotations, and reads. Uses curl or NCBI
-CLI to download genome FASTAs and SRA Toolkit to download WGS reads.
+CLI to download genome FASTAs and SRA Toolkit to download WGS long and short
+reads.
 
 Usage: sbatch $job_name.sbatch <in_tsv>
 
