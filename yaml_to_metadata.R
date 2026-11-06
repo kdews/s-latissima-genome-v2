@@ -112,6 +112,8 @@ parse_yaml <- function(file) {
   reads_method <- ""
   reads_locator <- ""
   reads_type <- ""
+  illumina_method <- ""
+  illumina_locator <- ""
   if (!is.null(record$reads)) {
     if (!is.list(record$reads)) {
       metadata_error(file, "reads", "must be a mapping or null")
@@ -141,6 +143,22 @@ parse_yaml <- function(file) {
                               paste(invalid, collapse = ", ")))
       }
     }
+    # The reads.illumina block is optional. For local Saccharina reads it
+    # identifies the script that generates assembly-specific female and male
+    # read lists. Other Illumina retrieval methods can be added downstream.
+    if (!is.null(record$reads$illumina)) {
+      if (!is.list(record$reads$illumina)) {
+        metadata_error(file, "reads.illumina", "must be a mapping or null")
+      }
+      illumina_method <- tolower(scalar_text(
+        get_field(record, file, "reads", "illumina", "method"),
+        file, "reads.illumina.method"
+      ))
+      illumina_locator <- locator_text(
+        get_field(record, file, "reads", "illumina", "locator"),
+        file, "reads.illumina.locator"
+      )
+    }
   }
   # Combine fields into data frame
   df <- data.frame(
@@ -154,6 +172,8 @@ parse_yaml <- function(file) {
     Reads_Method = reads_method,
     Reads_Type = reads_type,
     Reads_Locator = reads_locator,
+    Illumina_Method = illumina_method,
+    Illumina_Locator = illumina_locator,
     Annotation_GFF = annotation_gff,
     Sample_ID = sample_id,
     Region = region,

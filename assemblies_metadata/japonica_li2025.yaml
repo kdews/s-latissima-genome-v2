@@ -23,6 +23,10 @@ reads:
     method: sra
     locator: SRR31210069
   platform: pacbio
+  illumina:
+    method: sra
+    female: [SRR######, SRR######]
+    male: [SRR######, SRR######]
 relationships:
   assembly_series: japonica_li2025
   previous_version: null

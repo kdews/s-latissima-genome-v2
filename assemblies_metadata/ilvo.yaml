@@ -22,6 +22,10 @@ reads:
     method: sra
     locator: SRR26857257
   platform: illumina
+  illumina:
+    method: sra
+    female: [SRR######, SRR######]
+    male: [SRR######, SRR######]
 relationships:
   assembly_series: ilvo
   previous_version: null

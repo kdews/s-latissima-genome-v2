@@ -23,6 +23,9 @@ reads:
     method: glob
     locator: /project2/noujdine_61/kdeweese/latissima/longreads/ccs/*.fastq.gz
   platform: pacbio
+  illumina:
+    method: script
+    locator: s-latissima-genome-v2/saccharina_reads_by_sex.R
 relationships:
   assembly_series: lindell
   previous_version: lindell_v0

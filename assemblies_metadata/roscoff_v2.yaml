@@ -23,6 +23,10 @@ reads:
     method: sra
     locator: ERR13438528
   platform: pacbio
+  illumina:
+    method: sra
+    female: [SRR######, SRR######]
+    male: [SRR######, SRR######]
 relationships:
   assembly_series: roscoff
   previous_version: roscoff_v1
