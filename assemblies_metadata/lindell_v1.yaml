@@ -25,7 +25,7 @@ reads:
   platform: pacbio
   illumina:
     method: script
-    locator: s-latissima-genome-v2/saccharina_reads_by_sex.R
+    locator: saccharina_reads_by_sex.R
 relationships:
   assembly_series: lindell
   previous_version: lindell_v0

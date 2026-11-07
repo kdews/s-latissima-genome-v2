@@ -1,7 +1,7 @@
 label: skinny_kelp
 pretty_label: "Saccharina angustissima"
 taxonomy:
-  species: Saccharina angustissima (US v1)
+  species: Saccharina angustissima
 sample:
   id: SA-CB-7-MG-3
   region: US
@@ -19,7 +19,7 @@ assembly:
 reads:
   illumina:
     method: script
-    locator: s-latissima-genome-v2/saccharina_reads_by_sex.R
+    locator: saccharina_reads_by_sex.R
 relationships:
   assembly_series: skinny_kelp
   previous_version: null

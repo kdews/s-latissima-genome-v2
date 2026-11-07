@@ -25,10 +25,6 @@ reads:
       - SRR28880056
       - SRR28831804
   platform: nanopore
-  illumina:
-    method: sra
-    female: [SRR######, SRR######]
-    male: [SRR######, SRR######]
 relationships:
   assembly_series: ectocarpus_liu2024
   previous_version: null

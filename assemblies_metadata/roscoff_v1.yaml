@@ -25,8 +25,8 @@ reads:
   platform: pacbio
   illumina:
     method: sra
-    female: [SRR######, SRR######]
-    male: [SRR######, SRR######]
+    female: ERR13147084
+    male: ERR12682748
 relationships:
   assembly_series: roscoff
   previous_version: null

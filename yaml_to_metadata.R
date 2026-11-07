@@ -114,6 +114,8 @@ parse_yaml <- function(file) {
   reads_type <- ""
   illumina_method <- ""
   illumina_locator <- ""
+  illumina_female_locator <- ""
+  illumina_male_locator <- ""
   if (!is.null(record$reads)) {
     if (!is.list(record$reads)) {
       metadata_error(file, "reads", "must be a mapping or null")
@@ -143,9 +145,8 @@ parse_yaml <- function(file) {
                               paste(invalid, collapse = ", ")))
       }
     }
-    # The reads.illumina block is optional. For local Saccharina reads it
-    # identifies the script that generates assembly-specific female and male
-    # read lists. Other Illumina retrieval methods can be added downstream.
+    # The reads.illumina block is optional. method=script requires locator;
+    # method=sra requires separate female and male accession lists.
     if (!is.null(record$reads$illumina)) {
       if (!is.list(record$reads$illumina)) {
         metadata_error(file, "reads.illumina", "must be a mapping or null")
@@ -154,10 +155,48 @@ parse_yaml <- function(file) {
         get_field(record, file, "reads", "illumina", "method"),
         file, "reads.illumina.method"
       ))
-      illumina_locator <- locator_text(
-        get_field(record, file, "reads", "illumina", "locator"),
-        file, "reads.illumina.locator"
-      )
+      if (illumina_method == "script") {
+        illumina_locator <- locator_text(
+          get_field(record, file, "reads", "illumina", "locator"),
+          file, "reads.illumina.locator"
+        )
+        if (any(c("female", "male") %in% names(record$reads$illumina))) {
+          metadata_error(file, "reads.illumina",
+                         "method=script uses locator, not female/male accessions")
+        }
+      } else if (illumina_method == "sra") {
+        if ("locator" %in% names(record$reads$illumina)) {
+          metadata_error(file, "reads.illumina.locator",
+                         "method=sra uses separate female and male fields")
+        }
+        illumina_female_locator <- locator_text(
+          get_field(record, file, "reads", "illumina", "female"),
+          file, "reads.illumina.female"
+        )
+        illumina_male_locator <- locator_text(
+          get_field(record, file, "reads", "illumina", "male"),
+          file, "reads.illumina.male"
+        )
+        for (field_name in c("female", "male")) {
+          accessions <- if (field_name == "female") {
+            illumina_female_locator
+          } else {
+            illumina_male_locator
+          }
+          accessions <- trimws(strsplit(accessions, ",", fixed = T)[[1]])
+          invalid <- accessions[!grepl("^[SED]RR[0-9]+$", accessions)]
+          if (length(invalid) > 0) {
+            metadata_error(
+              file, paste0("reads.illumina.", field_name),
+              paste0("invalid SRA run accession(s): ",
+                     paste(invalid, collapse = ", "))
+            )
+          }
+        }
+      } else {
+        metadata_error(file, "reads.illumina.method",
+                       "must be either script or sra")
+      }
     }
   }
   # Combine fields into data frame
@@ -174,6 +213,8 @@ parse_yaml <- function(file) {
     Reads_Locator = reads_locator,
     Illumina_Method = illumina_method,
     Illumina_Locator = illumina_locator,
+    Illumina_Female_Locator = illumina_female_locator,
+    Illumina_Male_Locator = illumina_male_locator,
     Annotation_GFF = annotation_gff,
     Sample_ID = sample_id,
     Region = region,

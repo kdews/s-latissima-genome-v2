@@ -3,7 +3,7 @@ pretty_label: "Saccharina latissima (US v0)"
 taxonomy:
   species: Saccharina latissima
 sample:
-  id: SL-CT1-FG3
+  id: SL-CT1-FG-3
   region: US
   sex: U
   ploidy: 1
@@ -24,7 +24,7 @@ reads:
   platform: pacbio
   illumina:
     method: script
-    locator: s-latissima-genome-v2/saccharina_reads_by_sex.R
+    locator: saccharina_reads_by_sex.R
 relationships:
   assembly_series: lindell
   previous_version: null

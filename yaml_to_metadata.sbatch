@@ -28,7 +28,7 @@ fi
 # Help message
 show_help () {
   echo "\
-Convert one YAML file per assembly into a 17-column metadata TSV. The reads
+Convert one YAML file per assembly into a 19-column metadata TSV. The reads
 block and assembly.annotation_gff are optional; missing values receive blank
 TSV fields. The sample block supplies Sample_ID, Region, Sex, and Ploidy.
 
