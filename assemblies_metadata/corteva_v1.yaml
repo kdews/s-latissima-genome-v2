@@ -1,5 +1,5 @@
 label: corteva_v1
-pretty_label: "Saccharina latissima (US v2 draft)"
+pretty_label: "Saccharina latissima (US v1 draft)"
 taxonomy:
   species: Saccharina latissima
 sample:
@@ -17,12 +17,14 @@ assembly:
     locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v1/Draft_ONT_TelomereContigs_Saccharina.fasta.gz
     selector: null
 reads:
-  source:
-    location: local
-    method: glob
-    locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_ONT_raw_reads_Part[12].fastq
-  platform: nanopore
-  illumina:
+  assembly:
+    source:
+      location: local
+      method: glob
+      locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_ONT_raw_reads_Part[12].fastq
+    platform: nanopore
+  analysis:
+    platform: illumina
     method: script
     locator: saccharina_reads_by_sex.R
 relationships:

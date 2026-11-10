@@ -1,0 +1,34 @@
+label: roscoff_v1
+pretty_label: "Saccharina latissima (France v1)"
+taxonomy:
+  species: Saccharina latissima
+sample:
+  id: SLPER63f7
+  region: France
+  sex: U
+  ploidy: 1
+assembly:
+  version: v1
+  level: contig
+  current_representative: false
+  source:
+    location: remote
+    method: url_tar
+    locator: https://phaeoexplorer.sb-roscoff.fr/download/Saccharina-latissima.tar.gz
+    selector: Saccharina-latissima_FEMALE.fa
+  annotation_gff: Saccharina-latissima_FEMALE.gff
+reads:
+  source:
+    location: remote
+    method: sra
+    locator: ERR13438528
+  platform: pacbio
+  illumina:
+    method: sra
+    female: ERR13147084
+    male: ERR12682748
+relationships:
+  assembly_series: roscoff
+  previous_version: null
+analysis:
+  groups: [s_latissima, France, roscoff]

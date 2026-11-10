@@ -17,12 +17,14 @@ assembly:
     locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/lindell_v0/SugarkelpHifiasm.raconPolished.fasta.gz
     selector: null
 reads:
-  source:
-    location: local
-    method: glob
-    locator: /project2/noujdine_61/kdeweese/latissima/longreads/ccs/*.fastq.gz
-  platform: pacbio
-  illumina:
+  assembly:
+    source:
+      location: local
+      method: glob
+      locator: /project2/noujdine_61/kdeweese/latissima/longreads/ccs/*.fastq.gz
+    platform: pacbio
+  analysis:
+    platform: illumina
     method: script
     locator: saccharina_reads_by_sex.R
 relationships:

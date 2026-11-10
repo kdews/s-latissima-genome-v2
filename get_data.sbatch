@@ -23,13 +23,14 @@ DATAVERSE_API_BASE='https://edmond.mpg.de'
 show_help () {
   echo "\
 Using a TSV manifest of genome metadata, copies from local or downloads remote
-genome FASTAs, optional GFF annotations, and assembly long reads. For local
-Illumina datasets, runs a list-generating script without copying the FASTQs.
+genome FASTAs, optional GFF annotations, and reads used to construct each
+assembly. Separately prepares sex-specific Illumina read lists for downstream
+SDR and depth analyses.
 
 Usage: sbatch $job_name.sbatch <in_tsv>
 
 Required input:
-  in_tsv      TSV with 19 named columns (see below), with commented (#) header
+  in_tsv      TSV with 20 named columns (see below), with commented (#) header
 
 Input TSV columns:
   <Column_Name>           <Example>
@@ -39,22 +40,23 @@ Input TSV columns:
   4. Genome_Method        file
   5. Genome_Locator       /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_Genome_Polished_111925.fasta
   6. Genome_Selector      [blank]*
-  7. Reads_Source         local
-  8. Reads_Method         glob
-  9. Reads_Type           pacbio
-  10. Reads_Locator       /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_ONT_raw_reads_Part[12].fastq
-  11. Illumina_Method     script
-  12. Illumina_Locator    saccharina_reads_by_sex.R
-  13. Illumina_Female_Locator [blank for method=script]
-  14. Illumina_Male_Locator   [blank for method=script]
-  15. Annotation_GFF      annotation.gff3.gz**
-  16. Sample_ID           SL-CT1-FG3
-  17. Region              US
-  18. Sex                 V
-  19. Ploidy              1
+  7. Assembly_Reads_Source          local
+  8. Assembly_Reads_Method          glob
+  9. Assembly_Reads_Platform        nanopore
+  10. Assembly_Reads_Locator        /path/to/assembly_reads/*.fastq
+  11. Analysis_Reads_Platform       illumina
+  12. Analysis_Reads_Method         script
+  13. Analysis_Reads_Locator        saccharina_reads_by_sex.R
+  14. Analysis_Reads_Female_Locator [blank for method=script]
+  15. Analysis_Reads_Male_Locator   [blank for method=script]
+  16. Annotation_GFF                annotation.gff3.gz**
+  17. Sample_ID                     SL-CT1-FG3
+  18. Region                        US
+  19. Sex                           V
+  20. Ploidy                        1
 
-* If no reads are available, leave all four Reads_* fields blank. The row's
-  assembly will still be retrieved, and read retrieval will be skipped.
+* Assembly and analysis read fields are independently optional. Blank assembly
+  read fields do not prevent genome or analysis-read retrieval.
 
 ** Optional. For local assemblies, provide the full GFF path. For Figshare,
 Dataverse, or url_tar sources, provide the GFF filename. For direct URLs,
@@ -68,23 +70,25 @@ Supported genome sources:
   dataverse   DOI; selector is a FASTA filename or regex
   ncbi        NCBI assembly accession
 
-Supported read sources:
+Supported assembly-read sources:
   glob        local shell glob; matching FASTQ/FASTQ.GZ files are concatenated
   sra         one or more comma-separated SRA run accessions
 
-Supported Illumina methods:
-  script      run Illumina_Locator to generate <label>_female.list and
+Supported analysis-read methods:
+  script      run Analysis_Reads_Locator to generate <label>_female.list and
               <label>_male.list; FASTQs referenced by the lists are not copied
-  sra         download paired runs from Illumina_Female_Locator and
-              Illumina_Male_Locator; write paths to sex-specific lists
+  sra         download paired runs from Analysis_Reads_Female_Locator and
+              Analysis_Reads_Male_Locator; write paths to sex-specific lists
 
 Output:
   assemblies/             # directory containing all assemblies
   ├── <label>.fa          # renamed assembly FASTA (uncompressed)
   └── <label>.fa.fai      # FASTA index
-  reads/                              # assembly long reads shared by versions
-  └── <assembly-series>_long_<platform>.fastq.gz
-  read_lists/                         # paths to existing Illumina FASTQs
+  reads/                              # reads used to construct assemblies
+  ├── <assembly-series>_<platform>.fastq.gz
+  ├── <assembly-series>_illumina_1.fastq.gz
+  └── <assembly-series>_illumina_2.fastq.gz
+  read_lists/                         # analysis-read paths
   ├── <label>_female.list
   └── <label>_male.list
   annotations/            # directory containing available annotations
@@ -466,90 +470,117 @@ append_fastq () {
   conda deactivate
 }
 
-get_long_reads () {
-  local clean_label="$1" source="$2" method="$3" type="$4" locator="$5"
-  local longread_output="reads/${clean_label}_long_$type.fastq.gz"
-  local accession fastq longread dump_tmp
-  local -a inputs accessions outputs
+get_assembly_reads () {
+  local clean_label="$1" source="$2" method="$3" platform="$4" locator="$5"
+  local single_output="reads/${clean_label}_${platform}.fastq.gz"
+  local pe1_output="reads/${clean_label}_${platform}_1.fastq.gz"
+  local pe2_output="reads/${clean_label}_${platform}_2.fastq.gz"
+  local accession fastq dump_tmp single pe1 pe2 locator_r1 locator_r2 extra
+  local -a inputs inputs_r1 inputs_r2 accessions outputs
 
   [[ "$source" == local || "$source" == remote ]] \
-    || die "$clean_label: Reads_Source must be either 'local' or 'remote'"
-  log "$clean_label: preparing assembly long reads ($source/$method)"
+    || die "$clean_label: Assembly_Reads_Source must be local or remote"
+  log "$clean_label: preparing $platform assembly reads ($source/$method)"
 
   case "$source:$method" in
     local:glob)
-      # Look for glob
-      compgen -G "$locator" | sort > "$work_dir/read_inputs" || true
-      mapfile -t inputs < "$work_dir/read_inputs"
-      (( ${#inputs[@]} > 0 )) || die "$clean_label: glob matched no files: $locator"
-      # Initialize empty output FASTQ file
-      : > "$longread_output"
-      # Append all FASTQs into single file
-      for fastq in "${inputs[@]}"
-      do
-        append_fastq "$fastq" "$longread_output"
-      done
-      outputs=("$longread_output")
+      if [[ "$platform" == illumina ]]
+      then
+        IFS=',' read -r locator_r1 locator_r2 extra <<<"$locator"
+        [[ -n "$locator_r1" && -n "$locator_r2" && -z "${extra:-}" ]] \
+          || die "$clean_label: local Illumina assembly reads require two locator globs (R1,R2)"
+        compgen -G "$locator_r1" | sort > "$work_dir/${clean_label}_assembly_r1" || true
+        compgen -G "$locator_r2" | sort > "$work_dir/${clean_label}_assembly_r2" || true
+        mapfile -t inputs_r1 < "$work_dir/${clean_label}_assembly_r1"
+        mapfile -t inputs_r2 < "$work_dir/${clean_label}_assembly_r2"
+        (( ${#inputs_r1[@]} > 0 && ${#inputs_r1[@]} == ${#inputs_r2[@]} )) \
+          || die "$clean_label: Illumina R1/R2 globs must match the same nonzero number of files"
+        : > "$pe1_output"
+        : > "$pe2_output"
+        for fastq in "${inputs_r1[@]}"; do append_fastq "$fastq" "$pe1_output"; done
+        for fastq in "${inputs_r2[@]}"; do append_fastq "$fastq" "$pe2_output"; done
+        outputs=("$pe1_output" "$pe2_output")
+      else
+        compgen -G "$locator" | sort > "$work_dir/${clean_label}_assembly_inputs" || true
+        mapfile -t inputs < "$work_dir/${clean_label}_assembly_inputs"
+        (( ${#inputs[@]} > 0 )) \
+          || die "$clean_label: glob matched no files: $locator"
+        : > "$single_output"
+        for fastq in "${inputs[@]}"; do append_fastq "$fastq" "$single_output"; done
+        outputs=("$single_output")
+      fi
       ;;
     remote:sra)
       IFS=',' read -r -a accessions <<<"$locator"
-      : > "$longread_output"
-      outputs=("$longread_output")
+      if [[ "$platform" == illumina ]]
+      then
+        : > "$pe1_output"
+        : > "$pe2_output"
+        outputs=("$pe1_output" "$pe2_output")
+      else
+        : > "$single_output"
+        outputs=("$single_output")
+      fi
+
       for accession in "${accessions[@]}"
       do
-        accession="${accession//[[:space:]]/}" # remove any whitespaces
+        accession="${accession//[[:space:]]/}"
         [[ "$accession" =~ ^[SED]RR[0-9]+$ ]] \
-          || die "$clean_label: invalid SRA run accession: $accession" # check SRA
-      # Load sra-tools env
-      conda activate sratools
-        # Fetch SRA
+          || die "$clean_label: invalid assembly-read SRA accession: $accession"
+        conda activate sratools
         prefetch --progress --max-size 60000000 \
           --output-directory "$TMPDIR" "$accession"
-        # Make temporary directory for fasterq-dump
         dump_tmp="$TMPDIR/dump_tmp_$accession"
         mkdir -p "$dump_tmp"
-        # Dump FASTQ(s)
-        fasterq-dump "$TMPDIR/$accession" \
-          --progress --threads "$nthrd" --temp "$dump_tmp" --mem 15GB \
-          --outdir "$TMPDIR"
-        conda deactivate
-        # Find FASTQ(s) named by accession
-        longread="$TMPDIR/${accession}.fastq"
-        if [[ -f "$longread" ]]
+        if [[ "$platform" == illumina ]]
         then
-          append_fastq "$longread" "$longread_output"
+          fasterq-dump "$TMPDIR/$accession" \
+            --progress --threads "$nthrd" --temp "$dump_tmp" --mem 15GB \
+            --outdir "$TMPDIR" --split-files
         else
-          die "$clean_label: expected single-end long reads for $accession"
+          fasterq-dump "$TMPDIR/$accession" \
+            --progress --threads "$nthrd" --temp "$dump_tmp" --mem 15GB \
+            --outdir "$TMPDIR"
         fi
-        # Clean up only files created for this accession
-        rm -rf -- "$TMPDIR/$accession" "$dump_tmp" "$longread"
+        conda deactivate
+
+        if [[ "$platform" == illumina ]]
+        then
+          pe1="$TMPDIR/${accession}_1.fastq"
+          pe2="$TMPDIR/${accession}_2.fastq"
+          [[ -s "$pe1" && -s "$pe2" ]] \
+            || die "$clean_label: expected paired Illumina FASTQs for $accession"
+          append_fastq "$pe1" "$pe1_output"
+          append_fastq "$pe2" "$pe2_output"
+          rm -rf -- "$TMPDIR/$accession" "$dump_tmp" "$pe1" "$pe2"
+        else
+          single="$TMPDIR/${accession}.fastq"
+          [[ -s "$single" ]] \
+            || die "$clean_label: expected single-end $platform FASTQ for $accession"
+          append_fastq "$single" "$single_output"
+          rm -rf -- "$TMPDIR/$accession" "$dump_tmp" "$single"
+        fi
       done
       ;;
     *)
-      die "$clean_label: unsupported read source/method: $source/$method"
+      die "$clean_label: unsupported assembly-read source/method: $source/$method"
       ;;
   esac
 
   for output in "${outputs[@]}"
   do
-    # Load pigz env
+    [[ -s "$output" ]] || die "Created empty output: $output"
     conda activate pigz
-    # Verify final FASTQ(s) are compressed
-    pigz -t -p "$nthrd" "$output" || die "$clean_label: invalid gzip output: $output"
+    pigz -t -p "$nthrd" "$output" \
+      || die "$clean_label: invalid gzip output: $output"
     conda deactivate
-    # Verify final FASTQ(s) are not empty
-    if [[ -s "$output" ]]
-    then
-      log "Successfully retrived reads: $output"
-    else
-      die "Created empty output: $output"
-    fi
+    log "Successfully retrieved assembly reads: $output"
   done
 }
 
-# Run a dataset-specific script that writes paths to existing Illumina FASTQs.
+# Run a dataset-specific script that writes paths to existing analysis FASTQs.
 # Interface: SCRIPT LABEL SAMPLE_ID SCRIPTS_DIR OUTPUT_DIR
-make_illumina_lists () {
+make_analysis_lists () {
   local label="$1" sample_id="$2" locator="$3"
   local script="$locator"
   local female_list="read_lists/${label}_female.list"
@@ -559,11 +590,11 @@ make_illumina_lists () {
   then
     script="$scripts_dir/$script"
   fi
-  [[ -r "$script" ]] || die "$label: cannot read Illumina script: $locator"
+  [[ -r "$script" ]] || die "$label: cannot read analysis-read script: $locator"
 
   if [[ -s "$female_list" && -s "$male_list" ]]
   then
-    log "$label: Illumina read lists already exist. Skipping..."
+    log "$label: analysis read lists already exist. Skipping..."
     return
   fi
 
@@ -574,13 +605,13 @@ make_illumina_lists () {
 
   [[ -s "$female_list" ]] || die "$label: script did not create $female_list"
   [[ -s "$male_list" ]] || die "$label: script did not create $male_list"
-  log "$label: created Illumina read lists without copying local FASTQs"
+  log "$label: created analysis read lists without copying local FASTQs"
 }
 
 # Download paired-end Illumina SRA runs without merging biological samples.
 # Each accession retains its own R1/R2 files and is added to the sex-specific
-# assembly read list.
-get_illumina_sra () {
+# analysis read list.
+get_analysis_sra () {
   local label="$1" sx="$2" locator="$3"
   local list_file="read_lists/${label}_${sx}.list"
   local accession dump_tmp pe1 pe2 out1 out2
@@ -635,18 +666,18 @@ get_illumina_sra () {
   done
 
   [[ -s "$list_file" ]] || die "$label: created empty list: $list_file"
-  log "$label: wrote $sx Illumina paths to $list_file"
+  log "$label: wrote $sx analysis-read paths to $list_file"
 }
 
 # Check TSV column names
-exp_header=$'# Label\tPretty_Label\tGenome_Source\tGenome_Method\tGenome_Locator\tGenome_Selector\tReads_Source\tReads_Method\tReads_Type\tReads_Locator\tIllumina_Method\tIllumina_Locator\tIllumina_Female_Locator\tIllumina_Male_Locator\tAnnotation_GFF\tSample_ID\tRegion\tSex\tPloidy'
+exp_header=$'# Label\tPretty_Label\tGenome_Source\tGenome_Method\tGenome_Locator\tGenome_Selector\tAssembly_Reads_Source\tAssembly_Reads_Method\tAssembly_Reads_Platform\tAssembly_Reads_Locator\tAnalysis_Reads_Platform\tAnalysis_Reads_Method\tAnalysis_Reads_Locator\tAnalysis_Reads_Female_Locator\tAnalysis_Reads_Male_Locator\tAnnotation_GFF\tSample_ID\tRegion\tSex\tPloidy'
 IFS= read -r header < "$in_tsv" # read just first line of TSV
 header="${header%$'\r'}" # strip carriage return
 [[ "$header" == "$exp_header" ]] || die "Expected TSV header: $exp_header"
 # Verify TSV format
 awk -F '\t' '
-  NR > 1 && $0 !~ /^#/ && NF > 0 && NF != 19 {
-    printf "ERROR: line %d has %d TSV columns; expected 19\n", NR, NF > "/dev/stderr"
+  NR > 1 && $0 !~ /^#/ && NF > 0 && NF != 20 {
+    printf "ERROR: line %d has %d TSV columns; expected 20\n", NR, NF > "/dev/stderr"
     bad = 1
   }
   END { exit bad }
@@ -654,22 +685,23 @@ awk -F '\t' '
 # Parse TSV using file separator IFS for "read"
 awk -F '\t' -v OFS='\034' '
   NR > 1 && $0 !~ /^#/ && NF > 0 {
-    print $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+    print $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
   }
 ' "$in_tsv" > "$parsed"
 
 # Iterate through parsed TSV
 declare -A seen_labels=()
 while IFS=$'\034' read -r label pretty_label genome_source genome_method \
-  genome_locator genome_selector reads_source reads_method reads_type \
-  reads_locator illumina_method illumina_locator illumina_female_locator \
-  illumina_male_locator annotation_gff sample_id region sex ploidy extra
+  genome_locator genome_selector assembly_reads_source assembly_reads_method \
+  assembly_reads_platform assembly_reads_locator analysis_reads_platform \
+  analysis_reads_method analysis_reads_locator analysis_reads_female_locator \
+  analysis_reads_male_locator annotation_gff sample_id region sex ploidy extra
 do
   label="${label%$'\r'}"
-  reads_locator="${reads_locator%$'\r'}"
-  illumina_locator="${illumina_locator%$'\r'}"
-  illumina_female_locator="${illumina_female_locator%$'\r'}"
-  illumina_male_locator="${illumina_male_locator%$'\r'}"
+  assembly_reads_locator="${assembly_reads_locator%$'\r'}"
+  analysis_reads_locator="${analysis_reads_locator%$'\r'}"
+  analysis_reads_female_locator="${analysis_reads_female_locator%$'\r'}"
+  analysis_reads_male_locator="${analysis_reads_male_locator%$'\r'}"
   annotation_gff="${annotation_gff%$'\r'}"
   ploidy="${ploidy%$'\r'}"
   [[ -n "$label" ]] || continue
@@ -708,56 +740,72 @@ do
     fi
   fi
 
-  # Read metadata must be either complete or entirely blank
-  read_fields=("$reads_source" "$reads_method" "$reads_type" "$reads_locator")
-  n_read_fields=0
-  for field in "${read_fields[@]}"
+  # Assembly-read metadata must be complete or entirely blank.
+  assembly_read_fields=("$assembly_reads_source" "$assembly_reads_method" \
+    "$assembly_reads_platform" "$assembly_reads_locator")
+  n_assembly_read_fields=0
+  for field in "${assembly_read_fields[@]}"
   do
-    [[ -n "$field" ]] && (( n_read_fields += 1 ))
+    [[ -n "$field" ]] && (( n_assembly_read_fields += 1 ))
   done
-  (( n_read_fields == 0 || n_read_fields == 4 )) \
-    || die "$label: Reads_Source, Reads_Method, Reads_Type, and Reads_Locator must all be filled or all be blank"
+  (( n_assembly_read_fields == 0 || n_assembly_read_fields == 4 )) \
+    || die "$label: all four Assembly_Reads fields must be filled or all blank"
 
-  if (( n_read_fields == 0 ))
+  if (( n_assembly_read_fields == 0 ))
   then
-    log "$label: no reads specified. Skipping read retrieval..."
+    log "$label: no assembly reads specified. Skipping..."
   else
     # Strip version from label (same reads for all versions)
     clean_label="${label%%_v[0-9]*}"
-    # Skip reads download if read FASTQ(s) exist in reads/
-    if [[ -f "reads/${clean_label}_long_$reads_type.fastq.gz" ]]
+    if [[ "$assembly_reads_platform" == illumina ]]
     then
-      log "Already retrieved $reads_type reads for $clean_label. Skipping..."
+      assembly_outputs=(
+        "reads/${clean_label}_illumina_1.fastq.gz"
+        "reads/${clean_label}_illumina_2.fastq.gz"
+      )
     else
-      # Fetch assembly reads
-      log "Getting $reads_type reads for $clean_label..."
-      get_long_reads "$clean_label" "$reads_source" "$reads_method" "$reads_type" "$reads_locator"
+      assembly_outputs=("reads/${clean_label}_${assembly_reads_platform}.fastq.gz")
+    fi
+    if [[ -s "${assembly_outputs[0]}" && \
+          ( ${#assembly_outputs[@]} -eq 1 || -s "${assembly_outputs[1]}" ) ]]
+    then
+      log "Already retrieved $assembly_reads_platform assembly reads for $clean_label. Skipping..."
+    else
+      log "Getting $assembly_reads_platform assembly reads for $clean_label..."
+      get_assembly_reads "$clean_label" "$assembly_reads_source" \
+        "$assembly_reads_method" "$assembly_reads_platform" \
+        "$assembly_reads_locator"
     fi
   fi
 
-  # Local script methods generate path lists without copying FASTQs. SRA uses
-  # separate female and male accession lists so sex assignments are retained.
-  if [[ -z "$illumina_method" && -z "$illumina_locator" && \
-        -z "$illumina_female_locator" && -z "$illumina_male_locator" ]]
+  # Analysis reads are currently paired-end Illumina. Local script methods
+  # generate lists without copying FASTQs; SRA retains sex assignments.
+  if [[ -z "$analysis_reads_platform" && -z "$analysis_reads_method" && \
+        -z "$analysis_reads_locator" && -z "$analysis_reads_female_locator" && \
+        -z "$analysis_reads_male_locator" ]]
   then
-    log "$label: no Illumina reads specified. Skipping..."
+    log "$label: no analysis reads specified. Skipping..."
   else
-    case "$illumina_method" in
+    [[ "$analysis_reads_platform" == illumina ]] \
+      || die "$label: Analysis_Reads_Platform must be illumina"
+    case "$analysis_reads_method" in
       script)
-        [[ -n "$illumina_locator" && -z "$illumina_female_locator" && \
-           -z "$illumina_male_locator" ]] \
-          || die "$label: Illumina method=script requires only Illumina_Locator"
-        make_illumina_lists "$label" "$sample_id" "$illumina_locator"
+        [[ -n "$analysis_reads_locator" && \
+           -z "$analysis_reads_female_locator" && \
+           -z "$analysis_reads_male_locator" ]] \
+          || die "$label: analysis method=script requires only Analysis_Reads_Locator"
+        make_analysis_lists "$label" "$sample_id" "$analysis_reads_locator"
         ;;
       sra)
-        [[ -z "$illumina_locator" && -n "$illumina_female_locator" && \
-           -n "$illumina_male_locator" ]] \
-          || die "$label: Illumina method=sra requires female and male locators"
-        get_illumina_sra "$label" female "$illumina_female_locator"
-        get_illumina_sra "$label" male "$illumina_male_locator"
+        [[ -z "$analysis_reads_locator" && \
+           -n "$analysis_reads_female_locator" && \
+           -n "$analysis_reads_male_locator" ]] \
+          || die "$label: analysis method=sra requires female and male locators"
+        get_analysis_sra "$label" female "$analysis_reads_female_locator"
+        get_analysis_sra "$label" male "$analysis_reads_male_locator"
         ;;
       *)
-        die "$label: unsupported Illumina method: $illumina_method"
+        die "$label: unsupported analysis-read method: $analysis_reads_method"
         ;;
     esac
   fi

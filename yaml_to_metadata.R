@@ -106,95 +106,117 @@ parse_yaml <- function(file) {
   # a full path for local/file, or a filename for supported remote sources.
   annotation_gff <- scalar_text(record$assembly$annotation_gff, file,
                                 "assembly.annotation_gff", required = F)
-  # The reads block is optional. If it is absent or null, leave all four read
-  # columns blank so downstream scripts can skip read retrieval for this row.
-  reads_location <- ""
-  reads_method <- ""
-  reads_locator <- ""
-  reads_type <- ""
-  illumina_method <- ""
-  illumina_locator <- ""
-  illumina_female_locator <- ""
-  illumina_male_locator <- ""
+  # The reads block is optional. Reads used to construct the assembly and
+  # sex-specific Illumina reads used for downstream analysis are independent.
+  assembly_reads_location <- ""
+  assembly_reads_method <- ""
+  assembly_reads_platform <- ""
+  assembly_reads_locator <- ""
+  analysis_reads_platform <- ""
+  analysis_reads_method <- ""
+  analysis_reads_locator <- ""
+  analysis_reads_female_locator <- ""
+  analysis_reads_male_locator <- ""
   if (!is.null(record$reads)) {
     if (!is.list(record$reads)) {
       metadata_error(file, "reads", "must be a mapping or null")
     }
-    reads_location <- tolower(scalar_text(
-      get_field(record, file, "reads", "source", "location"),
-      file, "reads.source.location"
-    ))
-    reads_method <- tolower(scalar_text(
-      get_field(record, file, "reads", "source", "method"),
-      file, "reads.source.method"
-    ))
-    reads_locator <- locator_text(
-      get_field(record, file, "reads", "source", "locator"),
-      file, "reads.source.locator"
-    )
-    reads_type <- tolower(scalar_text(
-      get_field(record, file, "reads", "platform"),
-      file, "reads.platform"
-    ))
-    if (reads_method == "sra") {
-      accessions <- trimws(strsplit(reads_locator, ",", fixed = T)[[1]])
-      invalid <- accessions[!grepl("^[SED]RR[0-9]+$", accessions)]
-      if (length(invalid) > 0) {
-        metadata_error(file, "reads.source.locator",
-                       paste0("invalid SRA run accession(s): ",
-                              paste(invalid, collapse = ", ")))
+    unknown_reads <- setdiff(names(record$reads), c("assembly", "analysis"))
+    if (length(unknown_reads) > 0) {
+      metadata_error(file, "reads",
+                     paste0("unknown field(s): ",
+                            paste(unknown_reads, collapse = ", ")))
+    }
+    
+    if (!is.null(record$reads$assembly)) {
+      if (!is.list(record$reads$assembly)) {
+        metadata_error(file, "reads.assembly", "must be a mapping or null")
+      }
+      assembly_reads_location <- tolower(scalar_text(
+        get_field(record, file, "reads", "assembly", "source", "location"),
+        file, "reads.assembly.source.location"
+      ))
+      assembly_reads_method <- tolower(scalar_text(
+        get_field(record, file, "reads", "assembly", "source", "method"),
+        file, "reads.assembly.source.method"
+      ))
+      assembly_reads_locator <- locator_text(
+        get_field(record, file, "reads", "assembly", "source", "locator"),
+        file, "reads.assembly.source.locator"
+      )
+      assembly_reads_platform <- tolower(scalar_text(
+        get_field(record, file, "reads", "assembly", "platform"),
+        file, "reads.assembly.platform"
+      ))
+      if (assembly_reads_method == "sra") {
+        accessions <- trimws(strsplit(assembly_reads_locator, ",", fixed = T)[[1]])
+        invalid <- accessions[!grepl("^[SED]RR[0-9]+$", accessions)]
+        if (length(invalid) > 0) {
+          metadata_error(file, "reads.assembly.source.locator",
+                         paste0("invalid SRA run accession(s): ",
+                                paste(invalid, collapse = ", ")))
+        }
       }
     }
-    # The reads.illumina block is optional. method=script requires locator;
+    
+    # reads.analysis is currently Illumina-specific. method=script requires locator;
     # method=sra requires separate female and male accession lists.
-    if (!is.null(record$reads$illumina)) {
-      if (!is.list(record$reads$illumina)) {
-        metadata_error(file, "reads.illumina", "must be a mapping or null")
+    if (!is.null(record$reads$analysis)) {
+      if (!is.list(record$reads$analysis)) {
+        metadata_error(file, "reads.analysis", "must be a mapping or null")
       }
-      illumina_method <- tolower(scalar_text(
-        get_field(record, file, "reads", "illumina", "method"),
-        file, "reads.illumina.method"
+      analysis_reads_platform <- tolower(scalar_text(
+        get_field(record, file, "reads", "analysis", "platform"),
+        file, "reads.analysis.platform"
       ))
-      if (illumina_method == "script") {
-        illumina_locator <- locator_text(
-          get_field(record, file, "reads", "illumina", "locator"),
-          file, "reads.illumina.locator"
+      if (analysis_reads_platform != "illumina") {
+        metadata_error(file, "reads.analysis.platform",
+                       "must currently be illumina")
+      }
+      analysis_reads_method <- tolower(scalar_text(
+        get_field(record, file, "reads", "analysis", "method"),
+        file, "reads.analysis.method"
+      ))
+      if (analysis_reads_method == "script") {
+        analysis_reads_locator <- locator_text(
+          get_field(record, file, "reads", "analysis", "locator"),
+          file, "reads.analysis.locator"
         )
-        if (any(c("female", "male") %in% names(record$reads$illumina))) {
-          metadata_error(file, "reads.illumina",
+        if (any(c("female", "male") %in% names(record$reads$analysis))) {
+          metadata_error(file, "reads.analysis",
                          "method=script uses locator, not female/male accessions")
         }
-      } else if (illumina_method == "sra") {
-        if ("locator" %in% names(record$reads$illumina)) {
-          metadata_error(file, "reads.illumina.locator",
+      } else if (analysis_reads_method == "sra") {
+        if ("locator" %in% names(record$reads$analysis)) {
+          metadata_error(file, "reads.analysis.locator",
                          "method=sra uses separate female and male fields")
         }
-        illumina_female_locator <- locator_text(
-          get_field(record, file, "reads", "illumina", "female"),
-          file, "reads.illumina.female"
+        analysis_reads_female_locator <- locator_text(
+          get_field(record, file, "reads", "analysis", "female"),
+          file, "reads.analysis.female"
         )
-        illumina_male_locator <- locator_text(
-          get_field(record, file, "reads", "illumina", "male"),
-          file, "reads.illumina.male"
+        analysis_reads_male_locator <- locator_text(
+          get_field(record, file, "reads", "analysis", "male"),
+          file, "reads.analysis.male"
         )
         for (field_name in c("female", "male")) {
           accessions <- if (field_name == "female") {
-            illumina_female_locator
+            analysis_reads_female_locator
           } else {
-            illumina_male_locator
+            analysis_reads_male_locator
           }
           accessions <- trimws(strsplit(accessions, ",", fixed = T)[[1]])
           invalid <- accessions[!grepl("^[SED]RR[0-9]+$", accessions)]
           if (length(invalid) > 0) {
             metadata_error(
-              file, paste0("reads.illumina.", field_name),
+              file, paste0("reads.analysis.", field_name),
               paste0("invalid SRA run accession(s): ",
                      paste(invalid, collapse = ", "))
             )
           }
         }
       } else {
-        metadata_error(file, "reads.illumina.method",
+        metadata_error(file, "reads.analysis.method",
                        "must be either script or sra")
       }
     }
@@ -207,14 +229,15 @@ parse_yaml <- function(file) {
     Genome_Method = genome_method,
     Genome_Locator = genome_locator,
     Genome_Selector = genome_selector,
-    Reads_Source = reads_location,
-    Reads_Method = reads_method,
-    Reads_Type = reads_type,
-    Reads_Locator = reads_locator,
-    Illumina_Method = illumina_method,
-    Illumina_Locator = illumina_locator,
-    Illumina_Female_Locator = illumina_female_locator,
-    Illumina_Male_Locator = illumina_male_locator,
+    Assembly_Reads_Source = assembly_reads_location,
+    Assembly_Reads_Method = assembly_reads_method,
+    Assembly_Reads_Platform = assembly_reads_platform,
+    Assembly_Reads_Locator = assembly_reads_locator,
+    Analysis_Reads_Platform = analysis_reads_platform,
+    Analysis_Reads_Method = analysis_reads_method,
+    Analysis_Reads_Locator = analysis_reads_locator,
+    Analysis_Reads_Female_Locator = analysis_reads_female_locator,
+    Analysis_Reads_Male_Locator = analysis_reads_male_locator,
     Annotation_GFF = annotation_gff,
     Sample_ID = sample_id,
     Region = region,

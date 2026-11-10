@@ -1,5 +1,5 @@
 label: skinny_kelp
-pretty_label: "Saccharina angustissima"
+pretty_label: "Saccharina angustissima (US v1)"
 taxonomy:
   species: Saccharina angustissima
 sample:
@@ -17,7 +17,8 @@ assembly:
     locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/skinny_kelp/AY606_SkinnyKelp.asm.p_ctg.fasta.gz
     selector: null
 reads:
-  illumina:
+  analysis:
+    platform: illumina
     method: script
     locator: saccharina_reads_by_sex.R
 relationships:

@@ -17,15 +17,12 @@ assembly:
     locator: GCA_034768055.1
     selector: null
 reads:
-  source:
-    location: remote
-    method: sra
-    locator: SRR26857257
-  platform: illumina
-  illumina:
-    method: sra
-    female: [SRR######, SRR######]
-    male: [SRR######, SRR######]
+  assembly:
+    source:
+      location: remote
+      method: sra
+      locator: SRR26857257
+    platform: illumina
 relationships:
   assembly_series: ilvo
   previous_version: null

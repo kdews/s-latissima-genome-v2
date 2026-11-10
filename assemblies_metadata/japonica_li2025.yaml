@@ -18,12 +18,14 @@ assembly:
     selector: null
   annotation_gff: Saccharina_japonica.fix.gff3
 reads:
-  source:
-    location: remote
-    method: sra
-    locator: SRR31210069
-  platform: pacbio
-  illumina:
+  assembly:
+    source:
+      location: remote
+      method: sra
+      locator: SRR31210069
+    platform: pacbio
+  analysis:
+    platform: illumina
     method: sra
     female:
       - SRR12549470

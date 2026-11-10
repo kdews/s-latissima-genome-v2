@@ -18,12 +18,14 @@ assembly:
     selector: Saccharina-latissima_FEMALE.fa
   annotation_gff: Saccharina-latissima_FEMALE.gff
 reads:
-  source:
-    location: remote
-    method: sra
-    locator: ERR13438528
-  platform: pacbio
-  illumina:
+  assembly:
+    source:
+      location: remote
+      method: sra
+      locator: ERR13438528
+    platform: pacbio
+  analysis:
+    platform: illumina
     method: sra
     female: ERR13147084
     male: ERR12682748
