@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH -J get_data
 #SBATCH -o %x_logs/%x_%j.log
-#SBATCH -p largemem
+#SBATCH -p oneweek
 #SBATCH --time=12:00:00
 #SBATCH --cpus-per-task=12
-#SBATCH --mem=280g
+#SBATCH --mem=185g
 
 # Script variables
 # Extract job name from script
@@ -145,6 +145,8 @@ fi
 
 # Multithread support
 nthrd="${SLURM_CPUS_PER_TASK:-1}"
+# Allow SRA downloads up to 90% of requested memory
+max_sra_mem=$(( SLURM_MEM_PER_NODE * 90 / 100 ))
 
 # Input
 in_tsv="${1:-s-latissima-genome-v2/genomes_metadata.tsv}"
@@ -528,7 +530,7 @@ get_assembly_reads () {
         [[ "$accession" =~ ^[SED]RR[0-9]+$ ]] \
           || die "$clean_label: invalid assembly-read SRA accession: $accession"
         conda activate sratools
-        prefetch --progress --max-size 60000000 \
+        prefetch --progress --max-size "${max_sra_mem}M" \
           --output-directory "$TMPDIR" "$accession"
         dump_tmp="$TMPDIR/dump_tmp_$accession"
         mkdir -p "$dump_tmp"
@@ -570,6 +572,7 @@ get_assembly_reads () {
   for output in "${outputs[@]}"
   do
     [[ -s "$output" ]] || die "Created empty output: $output"
+    # Validate compression
     conda activate pigz
     pigz -t -p "$nthrd" "$output" \
       || die "$clean_label: invalid gzip output: $output"
@@ -636,29 +639,32 @@ get_analysis_sra () {
       die "$label: incomplete existing paired output for $accession"
     else
       conda activate sratools
-      prefetch --progress --max-size 60000000 \
+      prefetch --progress --max-size "${max_sra_mem}M" \
         --output-directory "$TMPDIR" "$accession"
-      dump_tmp="$TMPDIR/dump_tmp_$accession"
+      dump_tmp="reads/dump_tmp_$accession"
       mkdir -p "$dump_tmp"
+      # Larger analysis FASTQs ouput directly to reads/ directory
       fasterq-dump "$TMPDIR/$accession" \
         --progress --threads "$nthrd" --temp "$dump_tmp" --mem 15GB \
-        --outdir "$TMPDIR" --split-files
+        --outdir reads --split-files
       conda deactivate
-
-      pe1="$TMPDIR/${accession}_1.fastq"
-      pe2="$TMPDIR/${accession}_2.fastq"
+      # Check for fasterq-dump output FASTQs
+      pe1="reads/${accession}_1.fastq"
+      pe2="reads/${accession}_2.fastq"
       [[ -s "$pe1" && -s "$pe2" ]] \
         || die "$label: expected paired FASTQs for $sx run $accession"
-      : > "$out1"
-      : > "$out2"
-      append_fastq "$pe1" "$out1"
-      append_fastq "$pe2" "$out2"
-
+      rm -rf -- "$TMPDIR/$accession" "$dump_tmp" # clean up TMPDIR
+      # Compress FASTQs
       conda activate pigz
+      pigz -c -p "$nthrd" "$pe1" > "$out1" \
+        || die "$label: compression failed for $pe1"
+      pigz -c -p "$nthrd" "$pe2" > "$out2" \
+        || die "$label: compression failed for $pe2"
+      # Validate compression
       pigz -t -p "$nthrd" "$out1" "$out2" \
         || die "$label: invalid gzip output for $accession"
       conda deactivate
-      rm -rf -- "$TMPDIR/$accession" "$dump_tmp" "$pe1" "$pe2"
+      rm -f -- "$pe1" "$pe2" # remove uncompressed FASTQs
     fi
 
     printf '%s\n%s\n' "$(realpath -e "$out1")" "$(realpath -e "$out2")" \
