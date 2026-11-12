@@ -19,19 +19,12 @@ fi
 # URL to YGS.pl from Carvalho and Clark (2013)
 ygs_url="https://genome.cshlp.org/content/genome/suppl/2013/09/24/gr.156034.113.DC1/YGS.txt"
 ygs_pl="YGS.pl" # local name of YGS script
-sdr_parse="sdr_parse_multiqc.R" # R script parses reads for YGS from MultiQC data
 scripts_dir="s-latissima-genome-v2" # scripts directory
-if [[ -d "$scripts_dir" ]]; then
-  sdr_parse="$scripts_dir/$sdr_parse"
-  ygs_pl="$scripts_dir/$ygs_pl"
-fi
-ygs_pl="$(realpath -e "$ygs_pl")"
-main_outdir="${2:-sdr_id_results}" # main output directory
+main_outdir="sdr_id_results" # main output directory
 ygs_outdir="$main_outdir/${job_name}_results" # job type output directory
 window=500000 # window size = 500 kb
 win_str="$((window / 1000))kb" # get string from window size
 k=15 # k-mer size = 15
-target_cov=25 # target read coverage = 25x
 os_reads_file="os.txt" # list of paths to opposite sex reads
 ss_reads_file="ss.txt" # list of paths to same sex reads
 
@@ -55,14 +48,18 @@ Carvalho and Clark (2013) using k=$k. Reads must be from opposite sex (os)
 with respect to the assembly, with a set of same sex (ss) reads used to
 validate assembly k-mers.
 
-Usage: sbatch $job_name.sbatch <genome.fasta(.gz)> [main_outdir]
+Usage: sbatch $job_name.sbatch <genome.fasta(.gz)> <target> [scripts_dir]
 
 Input:
   genome.fasta(.gz)     # genome assembly FASTA
-  main_outdir           # optional: main output directory (default: sdr_id_results)
+  target                # sex chromosome to identify (default: U)
+                          - U (female-specific)
+                          - V (male-specific)
+                          - UV run separately with each target
+  scripts_dir           # optional: scripts directory (default: s-latissima-genome-v2)
 
 Output:
-  $ygs_outdir/<genome>/
+  $main_outdir/$ygs_outdir/<genome>/target_<target>/
   ├── ${win_str}_windows.contig_result                  # log for YGS contig mode
   ├── ${win_str}_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers in > 1 contig
   ├── ${win_str}_windows.fasta.gz                       # genome FASTA split into $win_str sliding windows
@@ -91,8 +88,8 @@ Requires:
 if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
   show_help
   exit 0
-elif [[ "$#" -lt 1 ]]; then
-  echo "Error: at least 1 positional arguments required."
+elif [[ $# -lt 2 || $# -gt 4 ]]; then
+  echo 'Expected genome, main_outdir, target and optional scripts_dir' >&2
   echo
   show_help
   exit 1
@@ -127,16 +124,28 @@ echo
 # Multithread support
 nthrd="${SLURM_CPUS_PER_TASK:-1}"
 
-# Download YGS.pl to scripts_dir (if needed)
-[[ -f "$ygs_pl" ]] || wget -O "$ygs_pl" "$ygs_url"
-
 # Input
 genome="${1:-"assemblies/corteva_v2_ha.fa"}" # genome FASTA of one sex (e.g., female, U)
+target="${2:-"U"}" # target sex
+scripts_dir="${3:-s-latissima-genome-v2}"
+
+# Check inputs
+[[ "$target" == U || "$target" == V ]] \
+  || { echo 'Target must be U or V' >&2; exit 1; }
+[[ -s "$ygs_out/$os_reads_file" && -s "$ygs_out/$ss_reads_file" ]] || {
+  echo "Error: missing or empty YGS read lists in $ygs_out" >&2
+  exit 1
+}
+
+# Download YGS.pl to scripts_dir (if needed), then resolve its absolute path
+[[ -f "$scripts_dir/$ygs_pl" ]] \
+  || wget -O "$scripts_dir/$ygs_pl" "$ygs_url" \
+  || exit 1
+ygs_pl="$(realpath -e "$scripts_dir/$ygs_pl")" || exit 1
 
 # Output
-genome_basename="$(basename "$genome")" # genome filename basename
-genome_base="${genome_basename%%.fa*}" # genome filename base
-ygs_out="$ygs_outdir/$genome_base" # job output subdirectory
+genome_base="$(basename "${genome%.fa}")" # genome filename base
+ygs_out="$ygs_outdir/$genome_base/target_$target" # job output subdirectory
 mkdir -p "$ygs_out" # create output directories
 genome_windows="${win_str}_windows.fasta.gz" # genome split into windows
 os="os_k$k" # basename for opposite sex outputs
@@ -185,11 +194,11 @@ echo "Preparing $k-mers for..."
 echo
 # Generate k-mer sequences from opposite sex Illumina reads
 echo "1. Opposite sex Illumina reads (w.r.t. assembly sample)"
+os_gen=os_generators.txt # generator filename
 if ! [[ -f "$ygs_out/$os_jf" ]]; then # skip if output exists
   # Import list into array
   mapfile -t os_reads < "$ygs_out/$os_reads_file"
   # Write list of decompression commands to file
-  os_gen=os_generators.txt # generator filename
   printf 'pigz -dc %q\n' "${os_reads[@]}" > "$ygs_out/$os_gen"
   n_g=4 # number of concurrent generators
   count_cmd=(
@@ -208,7 +217,7 @@ if ! [[ -f "$ygs_out/$os_jf" ]]; then # skip if output exists
   "${count_cmd[@]}"
   { set +x; } 2>/dev/null
 fi
-check_output "$ygs_out/$os_jf" && rm "$ygs_out/$os_gen"
+check_output "$ygs_out/$os_jf" && rm -f "$ygs_out/$os_gen"
 # Convert k-mer FASTQ to FASTA, filter for minimum frequency = 5
 if ! [[ -f "$ygs_out/$os_jfa" ]]; then # skip if output exists
   set -x
@@ -220,11 +229,11 @@ echo
 
 # Generate k-mer sequences from same sex Illumina reads
 echo "2. Same sex Illumina reads (w.r.t. assembly sample)"
+ss_gen=ss_generators.txt # generator filename
 if ! [[ -f "$ygs_out/$ss_jf" ]]; then # skip if output exists
   # Import list into array
   mapfile -t ss_reads < "$ygs_out/$ss_reads_file"
   # Write list of decompression commands to file
-  ss_gen=ss_generators.txt # generator filename
   printf 'pigz -dc %q\n' "${ss_reads[@]}" > "$ygs_out/$ss_gen"
   n_g=4 # number of concurrent generators
   count_cmd=(
@@ -243,7 +252,7 @@ if ! [[ -f "$ygs_out/$ss_jf" ]]; then # skip if output exists
   "${count_cmd[@]}"
   { set +x; } 2>/dev/null
 fi
-check_output "$ygs_out/$ss_jf" && rm "$ygs_out/$ss_gen"
+check_output "$ygs_out/$ss_jf" && rm -f "$ygs_out/$ss_gen"
 # Convert k-mer FASTQ to FASTA, filter for minimum frequency = 1
 if ! [[ -f "$ygs_out/$ss_jfa" ]]; then # skip if output exists
   set -x
