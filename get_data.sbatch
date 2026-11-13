@@ -823,7 +823,7 @@ rm -rf -- "$work_dir"
 # Log output
 echo
 echo "Finished. Output:"
-tree -A assemblies reads read_lists annotations
+tree -n --charset=UTF-8 assemblies reads read_lists annotations
 
 # Print date and time
 echo

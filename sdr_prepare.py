@@ -15,9 +15,9 @@ def fail(message):
     raise SystemExit("Error: " + message)
 
 
-def prepare(metadata, out, plan_filename="sdr_plan.tsv"):
+def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv"):
     """Validate metadata and read pairs, then write manifests and a job plan."""
-    # out.mkdir(parents=True, exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
     with metadata.open() as fh:
         rows = csv.reader(fh, delimiter='\t')
         header = next(rows)
@@ -81,51 +81,56 @@ def prepare(metadata, out, plan_filename="sdr_plan.tsv"):
                 if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]*', sample): fail(f'unsafe sample ID: {sample}')
                 if sample in samples and samples[sample] != read_sex: fail(f'sample in both sexes: {sample}')
                 samples[sample] = read_sex
-                pairs.append([sample, read_sex, f'lib{len(pairs)+1:04d}', mate_paths[1], mate_paths[2]])
-        print("Samples:", samples) # delete
-        print("Read pairs:") # delete
-        for pair in pairs: # delete
-            print("\t".join(pair)) # delete
-        # depth = out / 'depth_sdr_results' / label
-        # depth.mkdir(parents=True, exist_ok=True)
-        # for filename, header_fields, data in [
-        #     ('samples.tsv', ['Sample', 'Sex'], list(samples.items())),
-        #     ('read_pairs.tsv', ['Sample', 'Sex', 'Library', 'R1', 'R2'], pairs),
-        #     ('assembly_metadata.tsv', header, [[row[col] for col in header]])]:
-        #     with (depth / filename).open('w') as fh:
-        #         writer = csv.writer(fh, delimiter='\t', lineterminator='\n')
-        #         writer.writerow(header_fields); writer.writerows(data)
-        # for target in (['U', 'V'] if sex == 'UV' else [sex]):
-        #     ygs = out / 'ygs_sdr_results' / label / ('target_' + target)
-        #     ygs.mkdir(parents=True, exist_ok=True)
-        #     same = 'female' if target == 'U' else 'male'
-        #     opposite = 'male' if target == 'U' else 'female'
-        #     for filename, read_sex in [('ss.txt', same), ('os.txt', opposite)]:
-        #         # Do not silently reuse cached k-mers for changed lists.
-        #         dest = ygs / filename
-        #         content = '\n'.join(lists[read_sex]) + '\n'
-        #         if dest.exists() and dest.read_text() != content and any(ygs.glob('*.jf')):
-        #             fail(f'{ygs}: read list changed; move the previous direction directory before rerunning')
-        #         dest.write_text(content)
-        #     (ygs / 'assembly_metadata.tsv').write_text((depth / 'assembly_metadata.tsv').read_text())
+                # Local filename prefix: Sample_Library_RunID_Barcode_Plate_Lane
+                fields = key[1].split('_')
+                # For remote download, uses SRA ID
+                library = fields[1] if len(fields) > 1 else sample
+                pair_id = f'pair{len(pairs)+1:04d}'
+
+                pairs.append([sample, read_sex, library, pair_id,
+                              mate_paths[1], mate_paths[2]])
+        depth = out / depth_outdir / label
+        depth.mkdir(parents=True, exist_ok=True)
+        for filename, header_fields, data in [
+            ('samples.tsv', ['Sample', 'Sex'], list(samples.items())),
+            ('read_pairs.tsv', 
+             ['Sample', 'Sex', 'Library', 'Pair_ID', 'R1', 'R2'],
+             pairs),
+            ('assembly_metadata.tsv', header, [[row[col] for col in header]])]:
+            with (depth / filename).open('w') as fh:
+                writer = csv.writer(fh, delimiter='\t', lineterminator='\n')
+                writer.writerow(header_fields); writer.writerows(data)
+        for target in (['U', 'V'] if sex == 'UV' else [sex]):
+            ygs = out / ygs_outdir / label / ('target_' + target)
+            ygs.mkdir(parents=True, exist_ok=True)
+            same = 'female' if target == 'U' else 'male'
+            opposite = 'male' if target == 'U' else 'female'
+            for filename, read_sex in [('ss.txt', same), ('os.txt', opposite)]:
+                # Do not silently reuse cached k-mers for changed lists.
+                dest = ygs / filename
+                content = '\n'.join(lists[read_sex]) + '\n'
+                if dest.exists() and dest.read_text() != content and any(ygs.glob('*.jf')):
+                    fail(f'{ygs}: read list changed; move the previous direction directory before rerunning')
+                dest.write_text(content)
+            (ygs / 'assembly_metadata.tsv').write_text((depth / 'assembly_metadata.tsv').read_text())
         plan.append([label, str(genome), sex, str(len(samples))])
         print(f'{label}: Sample_ID={row["Sample_ID"]}; Region={row["Region"]}; Sex={sex}; '
               f'Ploidy={row["Ploidy"]}; {len(samples)} samples, {len(pairs)} read pairs')
-        print("\nAnalysis plan: Label, Genome, Sex, Sample count") # delete
-    for record in plan: # delete
-        print("\t".join(record)) # delete
-    # with (out / plan_filename).open('w') as fh:
-    #     csv.writer(fh, delimiter='\t', lineterminator='\n').writerows(plan)
+    with (out / plan_filename).open('w') as fh:
+        csv.writer(fh, delimiter='\t', lineterminator='\n').writerows(plan)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("metadata", type=Path, help="Genome metadata TSV")
     parser.add_argument("outdir", type=Path, help="Main SDR output directory")
+    parser.add_argument("ygs_outdir", type=Path, help="YGS output subdirectory")
+    parser.add_argument("depth_outdir", type=Path, help="Depth output subdirectory")
     parser.add_argument("plan_filename", nargs="?", default="sdr_plan.tsv",
                         help="Output plan filename (default: sdr_plan.tsv)")
     args = parser.parse_args()
-    prepare(args.metadata, args.outdir, args.plan_filename)
+    prepare(args.metadata, args.outdir, args.ygs_outdir,
+            args.depth_outdir, args.plan_filename)
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ ss_reads_file="ss.txt" # list of paths to same sex reads
 # Function to check output file exists before next step
 check_output () {
   outfile="$1"
-  if [[ -f "$outfile" ]]; then
+  if [[ -s "$outfile" ]]; then
     echo "Output file: $outfile"
     return 0
   else
@@ -48,10 +48,10 @@ Carvalho and Clark (2013) using k=$k. Reads must be from opposite sex (os)
 with respect to the assembly, with a set of same sex (ss) reads used to
 validate assembly k-mers.
 
-Usage: sbatch $job_name.sbatch <genome.fasta(.gz)> <target> [scripts_dir]
+Usage: sbatch $job_name.sbatch <genome>.fa <target> [scripts_dir]
 
 Input:
-  genome.fasta(.gz)     # genome assembly FASTA
+  genome.fa             # genome assembly FASTA (.fa suffix REQUIRED)
   target                # sex chromosome to identify (default: U)
                           - U (female-specific)
                           - V (male-specific)
@@ -59,7 +59,7 @@ Input:
   scripts_dir           # optional: scripts directory (default: s-latissima-genome-v2)
 
 Output:
-  $main_outdir/$ygs_outdir/<genome>/target_<target>/
+  $ygs_outdir/<genome>/target_<target>/
   ├── ${win_str}_windows.contig_result                  # log for YGS contig mode
   ├── ${win_str}_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers in > 1 contig
   ├── ${win_str}_windows.fasta.gz                       # genome FASTA split into $win_str sliding windows
@@ -88,8 +88,8 @@ Requires:
 if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
   show_help
   exit 0
-elif [[ $# -lt 2 || $# -gt 4 ]]; then
-  echo 'Expected genome, main_outdir, target and optional scripts_dir' >&2
+elif [[ $# -lt 2 || $# -gt 3 ]]; then
+  echo 'Expected genome, target and optional scripts_dir' >&2
   echo
   show_help
   exit 1
@@ -127,40 +127,30 @@ nthrd="${SLURM_CPUS_PER_TASK:-1}"
 # Input
 genome="${1:-"assemblies/corteva_v2_ha.fa"}" # genome FASTA of one sex (e.g., female, U)
 target="${2:-"U"}" # target sex
-scripts_dir="${3:-s-latissima-genome-v2}"
-
-# Check inputs
-[[ "$target" == U || "$target" == V ]] \
-  || { echo 'Target must be U or V' >&2; exit 1; }
-[[ -s "$ygs_out/$os_reads_file" && -s "$ygs_out/$ss_reads_file" ]] || {
-  echo "Error: missing or empty YGS read lists in $ygs_out" >&2
-  exit 1
-}
+# $target specifies assembly sex as U or V
+[[ "$target" == U || "$target" == V ]] || { echo 'target = U or V' >&2; exit 1; }
+scripts_dir="${3:-$scripts_dir}" # optional user-set scripts directory name
 
 # Download YGS.pl to scripts_dir (if needed), then resolve its absolute path
-[[ -f "$scripts_dir/$ygs_pl" ]] \
-  || wget -O "$scripts_dir/$ygs_pl" "$ygs_url" \
-  || exit 1
+if [[ ! -s "$scripts_dir/$ygs_pl" ]]; then
+  wget -O "$scripts_dir/$ygs_pl" "$ygs_url" || exit 1
+fi
 ygs_pl="$(realpath -e "$scripts_dir/$ygs_pl")" || exit 1
 
 # Output
 genome_base="$(basename "${genome%.fa}")" # genome filename base
 ygs_out="$ygs_outdir/$genome_base/target_$target" # job output subdirectory
-mkdir -p "$ygs_out" # create output directories
-genome_windows="${win_str}_windows.fasta.gz" # genome split into windows
-os="os_k$k" # basename for opposite sex outputs
-os_jf="$os.jf" # opposite sex k-mer counts
-os_jfa="$os.fasta.gz" # opposite sex k-mer FASTA (compressed)
-os_trc="$os.trace.gz" # opposite sex reads k-mer trace
-os_trc_log="$os.trace_result" # log for opposite sex trace run
-ss="ss_k$k" # basename for same sex outputs
-ss_jf="$ss.jf" # same sex k-mer counts
-ss_jfa="$ss.fasta.gz" # same sex k-mer FASTA (compressed)
-ss_trc="$ss.trace.gz" # same sex reads k-mer trace
-ss_trc_log="$ss.trace_result" # log for same sex trace run
-ctg="${win_str}_windows.gen_rep.gz" # genomic repeat k-mers
-ctg_log="${win_str}_windows.contig_result" # log for contig run
-out_final="${win_str}_windows_${os}_${ss}.final_result" # final run output
+mkdir -p "$ygs_out" # create output directory
+g_win_base="${win_str}_windows" # basename for windowized genome
+os_base="os_k$k" # basename for opposite sex outputs
+ss_base="ss_k$k" # basename for same sex outputs
+out_final="${g_win_base}_${os_base}_${ss_base}.final_result" # final run output
+
+# Verify input files: os/ss.txt lists of reads
+if ! [[ -s "$ygs_out/$os_reads_file" && -s "$ygs_out/$ss_reads_file" ]]; then
+  echo "Error: missing or empty YGS read lists in $ygs_out" >&2
+  exit 1
+fi
 
 echo "Step 1: Slice genome into windows for YGS (Barrera-Redondo et al. 2025, p. 2138)"
 # Load seqkit env
@@ -168,98 +158,56 @@ conda activate seqkit
 seqkit --help > /dev/null 2>&1 || exit 1
 echo "seqkit $(seqkit --help | grep "^Version" || exit 1)"
 # Section genome FASTA into non-overlapping windows (default = 500kb)
-seq_cmd=(
-  seqkit sliding
-  -j "$nthrd" # threads
-  -t dna # sequence type
-  --greedy # don't toss end sequences shorter than window size
-  -s "$window" # step size
-  -W "$window" # window size
-  -o "$ygs_out/$genome_windows" # output binned FASTA
-  "$genome" # input genome FASTA
-)
+# --greedy = don't toss end sequences shorter than window size
 set -x
-"${seq_cmd[@]}"
+seqkit sliding -j "$nthrd" -t dna --greedy -s "$window" -W "$window" \
+  -o "$ygs_out/$g_win_base.fasta.gz" "$genome" || exit 1
 { set +x; } 2>/dev/null
-check_output "$ygs_out/$genome_windows"
-echo; echo
+check_output "$ygs_out/$g_win_base.fasta.gz"
 conda deactivate
+echo; echo
 
 echo "Step 2: YGS method from Carvalho and Clark (2013) supplement"
 # https://genome.cshlp.org/content/genome/suppl/2013/09/24/gr.156034.113.DC1/Supplemental_Material_Ykmer_ms_SM.pdf
 # Load Jellyfish env
 conda activate jellyfish
 jellyfish --version || exit 1
-echo "Preparing $k-mers for..."
-echo
-# Generate k-mer sequences from opposite sex Illumina reads
-echo "1. Opposite sex Illumina reads (w.r.t. assembly sample)"
-os_gen=os_generators.txt # generator filename
-if ! [[ -f "$ygs_out/$os_jf" ]]; then # skip if output exists
-  # Import list into array
-  mapfile -t os_reads < "$ygs_out/$os_reads_file"
+echo "Preparing $k-mers for..."; echo
+n_g="$((nthrd > 4 ? 4 : 1))" # concurrent generators (=4 if threads >4)
+count_threads="$((nthrd > n_g ? nthrd - n_g : 1))" # calculate remaining threads
+for reads_type in os ss; do
+  # Set filter for minimum frequency = 5 (opposite sex) or 1 (same sex)
+  if [[ "$reads_type" == os ]]; then
+    type_str="opposite"
+    min_freq=5
+  elif [[ "$reads_type" == ss ]]; then
+    type_str="same"
+    min_freq=1
+  fi
+  echo "...$type_str sex reads (w.r.t. assembly sample)"
+  base="${reads_type}_k$k"
+  # Import read list into array
+  mapfile -t reads < "$ygs_out/$reads_type.txt"
   # Write list of decompression commands to file
-  printf 'pigz -dc %q\n' "${os_reads[@]}" > "$ygs_out/$os_gen"
-  n_g=4 # number of concurrent generators
-  count_cmd=(
-    jellyfish count
-    -t "$((nthrd - n_g))" # threads
-    -m "$k" # k-mer size = 15 (script default)
-    -s 10G # initial hash size
-    -C # count both strand, canonical representation
-    --quality-start=33 # ASCII for quality values (Illumina 1.9)
-    --min-quality=20 # minimum quality (hard masked)
-    -g "$ygs_out/$os_gen" # list of decompression commands
-    -G "$n_g" # number of concurrent generators to run at once
-    -o "$ygs_out/$os_jf" # output filename
-  )
-  set -x
-  "${count_cmd[@]}"
-  { set +x; } 2>/dev/null
-fi
-check_output "$ygs_out/$os_jf" && rm -f "$ygs_out/$os_gen"
-# Convert k-mer FASTQ to FASTA, filter for minimum frequency = 5
-if ! [[ -f "$ygs_out/$os_jfa" ]]; then # skip if output exists
-  set -x
-  jellyfish dump --lower-count=5 "$ygs_out/$os_jf" | gzip -c > "$ygs_out/$os_jfa"
-  { set +x; } 2>/dev/null
-fi
-check_output "$ygs_out/$os_jfa"
-echo
-
-# Generate k-mer sequences from same sex Illumina reads
-echo "2. Same sex Illumina reads (w.r.t. assembly sample)"
-ss_gen=ss_generators.txt # generator filename
-if ! [[ -f "$ygs_out/$ss_jf" ]]; then # skip if output exists
-  # Import list into array
-  mapfile -t ss_reads < "$ygs_out/$ss_reads_file"
-  # Write list of decompression commands to file
-  printf 'pigz -dc %q\n' "${ss_reads[@]}" > "$ygs_out/$ss_gen"
-  n_g=4 # number of concurrent generators
-  count_cmd=(
-    jellyfish count
-    -t "$((nthrd - n_g))" # threads
-    -m "$k" # k-mer size = 15 (script default)
-    -s 10G # initial hash size
-    -C # count both strand, canonical representation
-    --quality-start=33 # ASCII for quality values (Illumina 1.9)
-    --min-quality=20 # minimum quality (hard masked)
-    -g "$ygs_out/$ss_gen" # list of decompression commands
-    -G "$n_g" # number of concurrent generators to run at once
-    -o "$ygs_out/$ss_jf" # output filename
-  )
-  set -x
-  "${count_cmd[@]}"
-  { set +x; } 2>/dev/null
-fi
-check_output "$ygs_out/$ss_jf" && rm -f "$ygs_out/$ss_gen"
-# Convert k-mer FASTQ to FASTA, filter for minimum frequency = 1
-if ! [[ -f "$ygs_out/$ss_jfa" ]]; then # skip if output exists
-  set -x
-  jellyfish dump --lower-count=1 "$ygs_out/$ss_jf" | gzip -c > "$ygs_out/$ss_jfa"
-  { set +x; } 2>/dev/null
-fi
-check_output "$ygs_out/$ss_jfa"
+  printf 'pigz -dc %q\n' "${reads[@]}" > "$ygs_out/$reads_type.generators.txt"
+  # Generate k-mer sequences from reads
+  if [[ ! -s "$ygs_out/$base.jf" ]]; then # skip if output exists
+    set -x
+    jellyfish count -t "$count_threads" -m "$k" -s 10G -C --quality-start=33 \
+      --min-quality=20 -g "$ygs_out/$reads_type.generators.txt" -G "$n_g" \
+      -o "$ygs_out/$base.jf" || exit 1
+    { set +x; } 2>/dev/null
+  fi
+  check_output "$ygs_out/$base.jf"
+  # Convert k-mer FASTQ to FASTA
+  if [[ ! -s "$ygs_out/$base.fasta.gz" ]]; then # skip if output exists
+    set -x
+    jellyfish dump --lower-count="$min_freq" "$ygs_out/$base.jf" | gzip -c \
+      > "$ygs_out/$base.fasta.gz" || exit 1
+    { set +x; } 2>/dev/null
+  fi
+  check_output "$ygs_out/$base.fasta.gz"
+done
 conda deactivate
 echo; echo
 
@@ -276,49 +224,47 @@ cd "$ygs_out" || { echo "Erorr: Output directory ($ygs_out) not found."; exit 1;
 echo "YGS output will be in: $ygs_out"
 
 # Produce bit-array from opposite sex k-mers, filtered by quality and frequency
-echo "Producing bit-array from..."
-echo
-echo "1. ${k}-mers of opposite sex reads (w.r.t. assembly sample)"
-if ! [[ -f "$os_trc" ]]; then # skip if output exists
-  set -x
-  perl "$ygs_pl" kmer_size="$k" mode=trace trace="$os_jfa"
-  { set +x; } 2>/dev/null
-fi
-check_output "$os_trc"
-echo "Log file: $os_trc_log"
-grep -v '^$' "$os_trc_log" | sed 's/^/  /'
-echo
-
-# Produce validating bit-array from same sex k-mers, filtered by quality and frequency
-echo "2. ${k}-mers of same sex reads (w.r.t. assembly sample)"
-if ! [[ -f "$ss_trc" ]]; then # skip if output exists
-  set -x
-  perl "$ygs_pl" kmer_size="$k" mode=trace trace="$ss_jfa"
-  { set +x; } 2>/dev/null
-fi
-check_output "$ss_trc"
-echo "Log file: $ss_trc_log"
-grep -v '^$' "$ss_trc_log" | sed 's/^/  /'
-echo
+echo "Producing bit-array from..."; echo
+for reads_type in os ss; do
+  if [[ "$reads_type" == os ]]; then
+    type_str="opposite"
+  elif [[ "$reads_type" == ss ]]; then
+    type_str="same"
+  fi
+  echo "...${k}-mers of $type_str sex reads (w.r.t. assembly sample)"
+  base="${reads_type}_k$k"
+  if [[ ! -s "$base.trace.gz" ]]; then # skip if output exists
+    set -x
+    perl "$ygs_pl" kmer_size="$k" mode=trace trace="$base.fasta.gz" || exit 1
+    { set +x; } 2>/dev/null
+    check_output "$base.trace.gz"
+  fi
+  # Print log for trace run
+  echo "Log file: $base.trace_result"
+  grep -v '^$' "$base.trace_result" | sed 's/^/  /'
+done
 
 # Produce genomic repeat k-mers (copy number > 1) bit-array
-echo "3. Genomic repeats"
-if ! [[ -f "$ctg" ]]; then # skip if output exists
+echo "...genomic repeats"
+if [[ ! -s "$g_win_base.gen_rep.gz" ]]; then # skip if output exists
   set -x
-  perl "$ygs_pl" kmer_size="$k" mode=contig contig="$genome_windows"
+  perl "$ygs_pl" kmer_size="$k" mode=contig contig="$g_win_base.fasta.gz" \
+    || exit 1
   { set +x; } 2>/dev/null
 fi
-check_output "$ctg"
-echo "Log file: $ctg_log"
-grep -v '^$' "$ctg_log" | grep -vP '^>|^defline' | sed 's/^/  /'
+check_output "$g_win_base.gen_rep.gz"
+# Print log for genomic repeat run
+echo "Log file: $g_win_base.contig_result"
+grep -v '^$' "$g_win_base.contig_result" | grep -vP '^>|^defline' | sed 's/^/  /'
 echo
 
 # Predict SDR for each chromosome 
 echo "Starting YGS final run..."
-if ! [[ -f "$out_final" ]]; then # skip if output exists
+if [[ ! -s "$out_final" ]]; then # skip if output exists
   set -x
-  perl "$ygs_pl" kmer_size="$k" mode=final_run contig="$genome_windows" \
-    trace="$os_trc" gen_rep="$ctg" male_trace="$ss_trc"
+  perl "$ygs_pl" kmer_size="$k" mode=final_run contig="$g_win_base.fasta.gz" \
+    trace="$os_base.trace.gz" gen_rep="$g_win_base.gen_rep.gz" \
+    male_trace="$ss_base.trace.gz" || exit 1
   { set +x; } 2>/dev/null
 fi
 check_output "$out_final"

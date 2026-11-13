@@ -60,45 +60,46 @@ Input:
                         path exists, otherwise genomes_metadata.tsv.
 
 Output:
-  ygs_sdr_results/<Label>/target_U|target_V} # FIX
-
   $main_outdir/
   ├── $plan_tsv
   ├── $ygs_outdir/
-  │   └── <label>/
-  │       ├── ${win_str}_windows.contig_result                  # log for YGS contig mode
-  │       ├── ${win_str}_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers in > 1 contig
-  │       ├── ${win_str}_windows.fasta.gz                       # genome FASTA split into $win_str sliding windows
-  │       ├── ${win_str}_windows.gen_rep.gz                     # YGS bit-array of genomic repeat ${k}-mers
-  │       ├── ${win_str}_windows_os_k${k}_ss_k${k}.final_result # speaks for itself
-  │       ├── os.txt                                            # list of read file paths (os)
-  │       ├── os_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (os)
-  │       ├── os_k$k.jf                                         # ${k}-mer Jellyfish binary hash (os)
-  │       ├── os_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
-  │       ├── os_k$k.trace_result                               # log for YGS trace mode (os)
-  │       ├── ss.txt                                            # list of same sex read file paths (ss)
-  │       ├── ss_k$k.fasta.gz                                   # ${k}-mers extracted into FASTA (ss)
-  │       ├── ss_k$k.jf                                         # ${k}-mer Jellyfish binary hash (ss)
-  │       ├── ss_k$k.trace.gz                                   # YGS ${k}-mer bit-array (ss)
-  │       └── ss_k$k.trace_result                               # log for YGS trace mode (ss)
+  │   └── <label>/target_<U|V>/
+  │       ├── <windowsize>_windows.contig_result                  # log for YGS contig mode
+  │       ├── <windowsize>_windows.ctg_rep.gz                     # YGS bit-array of genomic repeat <k>-mers in > 1 contig
+  │       ├── <windowsize>_windows.fasta.gz                       # genome FASTA split into <windowsize> sliding windows
+  │       ├── <windowsize>_windows.gen_rep.gz                     # YGS bit-array of genomic repeat <k>-mers
+  │       ├── <windowsize>_windows_os_k<k>_ss_k<k>.final_result   # speaks for itself
+  │       ├── os.txt                                              # list of read file paths (os)
+  │       ├── os_k<k>.fasta.gz                                    # <k>-mers extracted into FASTA (os)
+  │       ├── os_k<k>.jf                                          # <k>-mer Jellyfish binary hash (os)
+  │       ├── os_k<k>.trace.gz                                    # YGS <k>-mer bit-array (ss)
+  │       ├── os_k<k>.trace_result                                # log for YGS trace mode (os)
+  │       ├── ss.txt                                              # list of same sex read file paths (ss)
+  │       ├── ss_k<k>.fasta.gz                                    # <k>-mers extracted into FASTA (ss)
+  │       ├── ss_k<k>.jf                                          # <k>-mer Jellyfish binary hash (ss)
+  │       ├── ss_k<k>.trace.gz                                    # YGS <k>-mer bit-array (ss)
+  │       └── ss_k<k>.trace_result                                # log for YGS trace mode (ss)
   ├── $depth_outdir/
   │   └── <label>/
-  │       ├── <label>.0123                                      # bwa-mem2 index files
-  │       ├── <label>.amb                                       # bwa-mem2 index files
-  │       ├── <label>.ann                                       # bwa-mem2 index files
-  │       ├── <label>.bwt.2bit.64                               # bwa-mem2 index files
-  │       ├── bams/                                             # individual-level BAMs
+  │       ├── samples.tsv                                         # 'Sample Sex'
+  │       ├── read_pairs.tsv                                      # 'Sample  Sex  Library  Pair_ID  R1  R2'
+  │       ├── assembly_metadata.tsv                               # 'Label	Pretty_Label	Genome_Source	Genome_Method	Genome_Locator	Genome_Selector	Assembly_Reads_Source	Assembly_Reads_Method	Assembly_Reads_Platform	Assembly_Reads_Locator	Analysis_Reads_Platform	Analysis_Reads_Method	Analysis_Reads_Locator	Analysis_Reads_Female_Locator	Analysis_Reads_Male_Locator	Annotation_GFF	Sample_ID	Region	Sex	Ploidy'
+  │       ├── <label>.0123                                        # bwa-mem2 index files
+  │       ├── <label>.amb                                         # bwa-mem2 index files
+  │       ├── <label>.ann                                         # bwa-mem2 index files
+  │       ├── <label>.bwt.2bit.64                                 # bwa-mem2 index files
+  │       ├── bams/                                               # individual-level BAMs
   │       │   ├── <indiv_n>.sorted.bam
   │       │   ├── <indiv_n>.sorted.bam.bai
   │       │   └── ...
-  │       ├── mosdepth/                                         # mosdepth result files
+  │       ├── mosdepth/                                           # mosdepth result files
   │       │   ├── <indiv_n>.mosdepth.global.dist.txt
   │       │   ├── <indiv_n>.mosdepth.region.dist.txt
   │       │   ├── <indiv_n>.mosdepth.summary.txt
   │       │   ├── <indiv_n>.regions.bed.gz
   │       │   ├── <indiv_n>.regions.bed.gz.csi
   │       │   └── ...
-  │       └── depth_filt.png                                    # plots of sample read depths
+  │       └── depth_filt.png                                      # plots of sample read depths
   └── $scripts_dir/
       └── figures/
           ├── depth_all_<label>.png
@@ -171,10 +172,11 @@ if [[ -z "$in_tsv" ]]; then
 fi
 
 # Download YGS.pl to scripts_dir (if needed), then resolve its absolute path
-[[ -f "$scripts_dir/$ygs_pl" ]] \
-  || wget -O "$scripts_dir/$ygs_pl" "$ygs_url" \
-  || exit 1
+if [[ ! -s "$scripts_dir/$ygs_pl" ]]; then
+  wget -O "$scripts_dir/$ygs_pl" "$ygs_url" || exit 1
+fi
 ygs_pl="$(realpath -e "$scripts_dir/$ygs_pl")" || exit 1
+
 
 # Verify input and script dependencies
 [[ -r "$in_tsv" ]] || { echo "Cannot read metadata: $in_tsv" >&2; exit 1; }
@@ -186,8 +188,10 @@ for script in "$prep_job" "$ygs_job" "$depth_job" "$ygs_plot" "$depth_plot"; do
 done
 
 # Parse metadata for job submission
+mkdir -p "$main_outdir"
 set -x
-if python3 "$scripts_dir/$prep_job" "$in_tsv" "$main_outdir" "$plan_tsv"; then
+if python3 "$scripts_dir/$prep_job" "$in_tsv" "$main_outdir" "$ygs_outdir" \
+  "$depth_outdir" "$plan_tsv"; then
   { set +x; } 2>/dev/null
   if [[ ! -s "$main_outdir/$plan_tsv" ]]; then
     echo 'No configured analyses.'
@@ -232,15 +236,15 @@ while IFS=$'\t' read -r label genome sex n_samples; do
       { set +x; } 2>/dev/null
     fi
     module purge
-    set -x
-    d_id="$(sbatch --parsable --array="1-$n_samples" "$scripts_dir/$depth_job" \
-      "$genome" "$main_outdir")" \
-      || exit 1
-    { set +x; } 2>/dev/null
-    set -x
-    sbatch --dependency="afterok:$d_id" "$scripts_dir/$depth_plot" "$depth_out" \
-      "$scripts_dir"
-    { set +x; } 2>/dev/null
+    # set -x
+    # d_id="$(sbatch --parsable --array="1-$n_samples" "$scripts_dir/$depth_job" \
+    #   "$genome")" \
+    #   || exit 1
+    # { set +x; } 2>/dev/null
+    # set -x
+    # sbatch --dependency="afterok:$d_id" "$scripts_dir/$depth_plot" "$depth_out" \
+    #   "$scripts_dir"
+    # { set +x; } 2>/dev/null
   fi
   targets=("$sex")
   [[ "$sex" != UV ]] || targets=(U V)
@@ -248,16 +252,16 @@ while IFS=$'\t' read -r label genome sex n_samples; do
     ygs_out="$main_outdir/$ygs_outdir/$label/target_$target"
     if [[ "$dry_run" == true ]]; then
       echo "PLAN YGS: $label target_$target; ygs_plot afterok"
-    else
-      set -x
-      y_id="$(sbatch --parsable "$scripts_dir/$ygs_job" "$genome" "$target" \
-        "$main_outdir" "$scripts_dir")" \
-        || exit 1
-      { set +x; } 2>/dev/null
-      set -x
-      sbatch --dependency="afterok:$y_id" "$scripts_dir/$ygs_plot" "$ygs_out" \
-        "$scripts_dir"
-      { set +x; } 2>/dev/null
+    # else
+    #   set -x
+    #   y_id="$(sbatch --parsable "$scripts_dir/$ygs_job" "$genome" "$target" \
+    #     "$scripts_dir")" \
+    #     || exit 1
+    #   { set +x; } 2>/dev/null
+    #   set -x
+    #   sbatch --dependency="afterok:$y_id" "$scripts_dir/$ygs_plot" "$ygs_out" \
+    #     "$scripts_dir"
+    #   { set +x; } 2>/dev/null
     fi
   done
 done < "$main_outdir/$plan_tsv"
