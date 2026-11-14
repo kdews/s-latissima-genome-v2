@@ -27,10 +27,8 @@ reads:
   analysis:
     platform: illumina
     method: sra
-    female:
-      - SRR12549470
-    male:
-      - SRR13212431
+    female: SRR12549470
+    male: SRR13212431
 relationships:
   assembly_series: japonica_li2025
   previous_version: null

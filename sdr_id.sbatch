@@ -2,7 +2,7 @@
 #SBATCH -J sdr_id
 #SBATCH -o %x_logs/%x_%j.log
 #SBATCH -p htcondor
-#SBATCH --time=01:00:00
+#SBATCH --time=1-0
 #SBATCH --mem=40g
 #SBATCH --cpus-per-task=16
 
@@ -236,15 +236,15 @@ while IFS=$'\t' read -r label genome sex n_samples; do
       { set +x; } 2>/dev/null
     fi
     module purge
-    # set -x
-    # d_id="$(sbatch --parsable --array="1-$n_samples" "$scripts_dir/$depth_job" \
-    #   "$genome")" \
-    #   || exit 1
-    # { set +x; } 2>/dev/null
-    # set -x
-    # sbatch --dependency="afterok:$d_id" "$scripts_dir/$depth_plot" "$depth_out" \
-    #   "$scripts_dir"
-    # { set +x; } 2>/dev/null
+    set -x
+    d_id="$(sbatch --parsable --array="1-$n_samples"%4 \
+      -o "%x_logs/%x_${label}_%j_%a.log" "$scripts_dir/$depth_job" "$genome")" \
+      || exit 1
+    { set +x; } 2>/dev/null
+    set -x
+    sbatch --dependency="afterok:$d_id" "$scripts_dir/$depth_plot" "$depth_out" \
+      "$scripts_dir"
+    { set +x; } 2>/dev/null
   fi
   targets=("$sex")
   [[ "$sex" != UV ]] || targets=(U V)
@@ -252,16 +252,16 @@ while IFS=$'\t' read -r label genome sex n_samples; do
     ygs_out="$main_outdir/$ygs_outdir/$label/target_$target"
     if [[ "$dry_run" == true ]]; then
       echo "PLAN YGS: $label target_$target; ygs_plot afterok"
-    # else
-    #   set -x
-    #   y_id="$(sbatch --parsable "$scripts_dir/$ygs_job" "$genome" "$target" \
-    #     "$scripts_dir")" \
-    #     || exit 1
-    #   { set +x; } 2>/dev/null
-    #   set -x
-    #   sbatch --dependency="afterok:$y_id" "$scripts_dir/$ygs_plot" "$ygs_out" \
-    #     "$scripts_dir"
-    #   { set +x; } 2>/dev/null
+    else
+      set -x
+      y_id="$(sbatch --parsable -o "%x_logs/%x_${label}_%j.log" \
+        "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir")" \
+        || exit 1
+      { set +x; } 2>/dev/null
+      set -x
+      sbatch --dependency="afterok:$y_id" "$scripts_dir/$ygs_plot" "$ygs_out" \
+        "$scripts_dir"
+      { set +x; } 2>/dev/null
     fi
   done
 done < "$main_outdir/$plan_tsv"

@@ -554,13 +554,13 @@ get_assembly_reads () {
             || die "$clean_label: expected paired Illumina FASTQs for $accession"
           append_fastq "$pe1" "$pe1_output"
           append_fastq "$pe2" "$pe2_output"
-          rm -rf -- "$TMPDIR/$accession" "$dump_tmp" "$pe1" "$pe2"
+          rm -rf -- "${TMPDIR:?}/$accession" "$dump_tmp" "$pe1" "$pe2"
         else
           single="$TMPDIR/${accession}.fastq"
           [[ -s "$single" ]] \
             || die "$clean_label: expected single-end $platform FASTQ for $accession"
           append_fastq "$single" "$single_output"
-          rm -rf -- "$TMPDIR/$accession" "$dump_tmp" "$single"
+          rm -rf -- "${TMPDIR:?}/$accession" "$dump_tmp" "$single"
         fi
       done
       ;;
@@ -628,6 +628,13 @@ get_analysis_sra () {
     accession="${accession//[[:space:]]/}"
     [[ "$accession" =~ ^[SED]RR[0-9]+$ ]] \
       || die "$label: invalid $sx SRA run accession: $accession"
+    
+    # Save accession metadata to CSV in reads/
+    conda activate sratools
+    NQUIRE_HELPER=wget efetch -db sra -id "$accession" -format runinfo \
+      > "reads/${accession}_runinfo.csv" \
+      || die "Could not get metatdata for $accession"
+    conda deactivate
 
     out1="reads/${accession}_1.fastq.gz"
     out2="reads/${accession}_2.fastq.gz"
@@ -653,7 +660,7 @@ get_analysis_sra () {
       pe2="reads/${accession}_2.fastq"
       [[ -s "$pe1" && -s "$pe2" ]] \
         || die "$label: expected paired FASTQs for $sx run $accession"
-      rm -rf -- "$TMPDIR/$accession" "$dump_tmp" # clean up TMPDIR
+      rm -rf -- "${TMPDIR:?}/$accession" "$dump_tmp" # clean up TMPDIR
       # Compress FASTQs
       conda activate pigz
       pigz -c -p "$nthrd" "$pe1" > "$out1" \

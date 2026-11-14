@@ -27,7 +27,7 @@ reads:
   analysis:
     platform: illumina
     method: sra
-    female: ERR13147084
+    female: ERR12682612
     male: ERR12682748
 relationships:
   assembly_series: roscoff

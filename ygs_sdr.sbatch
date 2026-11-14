@@ -89,7 +89,7 @@ if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
   show_help
   exit 0
 elif [[ $# -lt 2 || $# -gt 3 ]]; then
-  echo 'Expected genome, target and optional scripts_dir' >&2
+  echo 'Expected genome, target and (optional) scripts_dir' >&2
   echo
   show_help
   exit 1

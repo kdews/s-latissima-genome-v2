@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -J depth_sdr
 #SBATCH -o %x_logs/%x_%a_%j.log
-#SBATCH -p gpu
-#SBATCH --time=05:00:00
+#SBATCH -p oneweek
+#SBATCH --time=1-0
 #SBATCH --mem=65g
 #SBATCH --cpus-per-task=8
 #SBATCH -a 1
@@ -126,7 +126,7 @@ genome="${1:-"assemblies/corteva_v2_ha.fa"}" # genome FASTA of one sex (e.g., fe
 genome_base="$(basename "${genome%.fa}")" # genome filename base
 depth_out="$depth_outdir/$genome_base" # job output subdirectory
 [[ -d "$depth_out" ]] || { echo "Error: no output directory ($depth_out)"; exit 1; }
-mkdir -p "$depth_out/bams" "$depth_out/mosdepth"
+mkdir -p "$depth_out/bams" "$depth_out/mosdepth" "$depth_out/fastp"
 
 # Index input tables with array ID
 task="${SLURM_ARRAY_TASK_ID:-1}"
@@ -142,20 +142,45 @@ sort_threads="$((nthrd > 1 ? nthrd / 2 : 1))" # threads for samtools sort
 mem_per_thread="$((mem_mb / 5 / (sort_threads + 1)))" # Mb of memory per thread
 (( mem_per_thread > 0 )) || { echo 'Insufficient sort memory' >&2; exit 1; }
 
-# Parse read_pairs.tsv to align samples to genome assembly
+# Check conda envs
 conda activate bwa-mem2
 echo -n "bwa-mem2 version: "
 bwa-mem2 version 2>&1 | tail -n +3 || exit 1
 samtools --version | head -n2 || exit 1
+conda deactivate
+conda activate fastp
+fastp --version || exit 1
+conda deactivate
 echo
+
+# Parse read_pairs.tsv to align samples to genome assembly
 work_dir="$(mktemp -d)"
 bam_args=()
 while IFS=$'\t' read -r sample read_sex library pair_id R1 R2; do
-  [[ "$sample" == "$indiv_id" ]] || continue
+  [[ "$sample" == "$indiv_id" ]] || continue # select line(s) by ID match
   if ! [[ "$read_sex" == "$sex" && -r "$R1" && -r "$R2" ]]; then
-    echo 'Invalid read manifest row' >&2
+    echo 'Error: Invalid read manifest row.' >&2
     exit 1
   fi
+  # Trim input reads
+  trim_R1="$work_dir/${pair_id}_R1.fastq.gz"
+  trim_R2="$work_dir/${pair_id}_R2.fastq.gz"
+  conda activate fastp
+  set -x
+  fastp --in1 "$R1" --in2 "$R2" \
+    --out1 "$trim_R1" --out2 "$trim_R2" \
+    --detect_adapter_for_pe \
+    --trim_poly_g \
+    --poly_g_min_len 8 \
+    --thread "$nthrd" \
+    --html "$depth_out/fastp/${indiv_id}.${pair_id}.html" \
+    --json "$depth_out/fastp/${indiv_id}.${pair_id}.json" \
+    || exit 1
+  { set +x; } 2>/dev/null
+  conda deactivate
+  
+  # Align and sort reads
+  conda activate bwa-mem2
   # Generic read groups support both SRA accessions and local Illumina filenames
   rg_lb="${indiv_id}_${library}" # same libraries retain common LB across lanes
   rg_id="${indiv_id}.${pair_id}" # each FASTQ pair has a unique read group ID
@@ -163,13 +188,14 @@ while IFS=$'\t' read -r sample read_sex library pair_id R1 R2; do
   set -x
   bwa-mem2 mem -t "$nthrd" \
     -R "@RG\tID:$rg_id\tSM:$indiv_id\tLB:$rg_lb\tPL:ILLUMINA\tPU:$rg_id" \
-    "$depth_out/$genome_base" "$R1" "$R2" \
+    "$depth_out/$genome_base" "$trim_R1" "$trim_R2" \
     | samtools sort -n -@ "$sort_threads" -m "${mem_per_thread}M"\
       -T "$work_dir/$pair_id.sort" -O bam -o "$sample_bam" || exit 1
   { set +x; } 2>/dev/null
+  rm -rf -- "${work_dir:?}/"* # clean temp working directory
   bam_args+=(-I "$sample_bam")
+  conda deactivate
 done < <(tail -n +2 "$depth_out/read_pairs.tsv")
-conda deactivate
 (( ${#bam_args[@]} > 0 )) || { echo "No pairs for $indiv_id" >&2; exit 1; }
 rm -rf -- "$work_dir"
 
