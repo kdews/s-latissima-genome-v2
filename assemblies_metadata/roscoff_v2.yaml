@@ -10,7 +10,8 @@ sample:
 assembly:
   version: v2
   level: scaffold
-  current_representative: true
+  assembly_series: roscoff
+  version_order: 2
   source:
     location: remote
     method: url_tar
@@ -25,12 +26,8 @@ reads:
       locator: ERR13438528
     platform: pacbio
   analysis:
+    group: s_latissima_france
     platform: illumina
     method: sra
     female: ERR12682612
     male: ERR12682748
-relationships:
-  assembly_series: roscoff
-  previous_version: roscoff_v1
-analysis:
-  groups: [s_latissima, France, roscoff]

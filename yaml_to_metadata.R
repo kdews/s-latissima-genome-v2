@@ -3,6 +3,7 @@
 rm(list = ls())
 # Load required packages
 library(yaml)
+library(tidyverse)
 
 # Functions
 # Order for label factor
@@ -11,6 +12,7 @@ lbl_order <- c(
   "corteva",
   "roscoff",
   "ilvo",
+  "skinny",
   "japonica",
   "ectocarpus"
 )
@@ -80,6 +82,12 @@ parse_yaml <- function(file) {
                               file, "pretty_label")
   sample_id <- scalar_text(get_field(record, file, "sample", "id"),
                            file, "sample.id")
+  species <- scalar_text(get_field(record, file, "taxonomy", "species"),
+                         file, "taxonomy.species")
+  version <- scalar_text(get_field(record, file, "assembly", "version"),
+                         file, "assembly.version")
+  assembly_level <- scalar_text(get_field(record, file, "assembly", "level"),
+                                file, "assembly.level")
   region <- scalar_text(get_field(record, file, "sample", "region"),
                         file, "sample.region")
   sex <- scalar_text(get_field(record, file, "sample", "sex"),
@@ -112,6 +120,7 @@ parse_yaml <- function(file) {
   assembly_reads_method <- ""
   assembly_reads_platform <- ""
   assembly_reads_locator <- ""
+  analysis_reads_group <- ""
   analysis_reads_platform <- ""
   analysis_reads_method <- ""
   analysis_reads_locator <- ""
@@ -164,6 +173,16 @@ parse_yaml <- function(file) {
     if (!is.null(record$reads$analysis)) {
       if (!is.list(record$reads$analysis)) {
         metadata_error(file, "reads.analysis", "must be a mapping or null")
+      }
+      # Optional shared read-set ID; default to this assembly's label.
+      analysis_reads_group <- if (is.null(record$reads$analysis$group)) {
+        label
+      } else {
+        scalar_text(record$reads$analysis$group, file, "reads.analysis.group")
+      }
+      if (!grepl("^[A-Za-z0-9][A-Za-z0-9._-]*$", analysis_reads_group)) {
+        metadata_error(file, "reads.analysis.group",
+                       "must start with a letter or digit and contain only letters, digits, '.', '_' or '-'")
       }
       analysis_reads_platform <- tolower(scalar_text(
         get_field(record, file, "reads", "analysis", "platform"),
@@ -221,10 +240,35 @@ parse_yaml <- function(file) {
       }
     }
   }
+  # Assembly comparison metadata: order is numeric within each series.
+  assembly_series <- scalar_text(
+    get_field(record, file, "assembly", "assembly_series"),
+    file, "assembly.assembly_series"
+  )
+  version_order <- scalar_text(
+    get_field(record, file, "assembly", "version_order"),
+    file, "assembly.version_order"
+  )
+  if (!grepl("^[1-9][0-9]*$", version_order)) {
+    metadata_error(file, "assembly.version_order", "must be a positive integer")
+  }
+  version_order <- as.numeric(version_order)
+  if (!is.finite(version_order)) {
+    metadata_error(file, "assembly.version_order", "number is too large")
+  }
   # Combine fields into data frame
   df <- data.frame(
     Label = label,
     Pretty_Label = pretty_label,
+    Sample_ID = sample_id,
+    Species = species,
+    Region = region,
+    Sex = sex,
+    Ploidy = ploidy,
+    Assembly_Series = assembly_series,
+    Version = version,
+    Version_Order = version_order,
+    Assembly_Level = assembly_level,
     Genome_Source = genome_location,
     Genome_Method = genome_method,
     Genome_Locator = genome_locator,
@@ -233,16 +277,13 @@ parse_yaml <- function(file) {
     Assembly_Reads_Method = assembly_reads_method,
     Assembly_Reads_Platform = assembly_reads_platform,
     Assembly_Reads_Locator = assembly_reads_locator,
+    Analysis_Reads_Group = analysis_reads_group,
     Analysis_Reads_Platform = analysis_reads_platform,
     Analysis_Reads_Method = analysis_reads_method,
     Analysis_Reads_Locator = analysis_reads_locator,
     Analysis_Reads_Female_Locator = analysis_reads_female_locator,
     Analysis_Reads_Male_Locator = analysis_reads_male_locator,
     Annotation_GFF = annotation_gff,
-    Sample_ID = sample_id,
-    Region = region,
-    Sex = sex,
-    Ploidy = ploidy,
     check.names = F,
     stringsAsFactors = F
   )
@@ -261,6 +302,9 @@ if (interactive()) {
   line_args <- commandArgs(trailingOnly = T)
   cat("Arguments:", "\n")
   cat(line_args, "\n", sep = "\n")
+  if (length(line_args) != 2L) {
+    stop("Usage: Rscript yaml_to_metadata.R YAML_DIR OUT_TSV", call. = F)
+  }
   yaml_dir <- line_args[1]
   out_tsv <- line_args[2]
 }
@@ -271,20 +315,36 @@ if (!dir.exists(yaml_dir)) stop("YAML directory does not exist: ", yaml_dir)
 yaml_files <- list.files(yaml_dir, pattern = "\\.ya?ml$",
                          full.names = T, ignore.case = T)
 
+if (length(yaml_files) == 0L) stop("No YAML files found in: ", yaml_dir)
+
 # Read all YAML files into combined data frame
 metadata <- do.call(rbind, lapply(yaml_files, parse_yaml))
-# Sort "Label" column with factor
-lbl_lvls <- sapply(lbl_order, grep, sort(metadata$Label), value = T,
-                   perl = T) |>
-  unname() |>
-  unlist()
-metadata <- metadata[order(factor(metadata$Label, levels = lbl_lvls)), ]
-
 # Error if duplicated labels are found
 if (anyDuplicated(metadata$Label)) {
   duplicates <- unique(metadata$Label[duplicated(metadata$Label)])
   stop("Duplicate label(s): ", paste(duplicates, collapse = ", "), call. = F)
 }
+
+# Every assembly in a series must have a distinct numeric order.
+series_order <- metadata[c("Assembly_Series", "Version_Order")]
+duplicate_order <- duplicated(series_order) | duplicated(series_order, fromLast = T)
+if (any(duplicate_order)) {
+  conflicts <- metadata[duplicate_order, c("Label", "Assembly_Series", "Version_Order")]
+  details <- paste0(conflicts$Label, " (series=", conflicts$Assembly_Series,
+                    ", order=", conflicts$Version_Order, ")")
+  stop("Duplicate Version_Order within an Assembly_Series: ",
+       paste(details, collapse = "; "), call. = F)
+}
+
+# Sort labels by label group and version order
+metadata <- metadata %>%
+  mutate(
+    Label_Group = map_int(Label, \(label) {
+      which(str_starts(label, fixed(lbl_order)))[1]
+    })
+  ) %>%
+  arrange(Label_Group, Version_Order, Label) %>%
+  select(-Label_Group)
 
 # Write output metadata TSV
 colnames(metadata)[1] <- paste("#", colnames(metadata)[1])

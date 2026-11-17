@@ -8,9 +8,10 @@ sample:
   sex: U
   ploidy: 1
 assembly:
-  version: v1
+  version: DeWeese 2025
   level: scaffold
-  current_representative: true
+  assembly_series: lindell
+  version_order: 2
   source:
     location: local
     method: file
@@ -25,11 +26,7 @@ reads:
       locator: /project2/noujdine_61/kdeweese/latissima/longreads/ccs/*.fastq.gz
     platform: pacbio
   analysis:
+    group: s_latissima_us
     platform: illumina
     method: script
     locator: saccharina_reads_by_sex.R
-relationships:
-  assembly_series: lindell
-  previous_version: lindell_v0
-analysis:
-  groups: [s_latissima, US, lindell]

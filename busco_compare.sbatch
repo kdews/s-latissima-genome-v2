@@ -81,12 +81,13 @@ conda deactivate
 
 # Input
 # Assembly metadata
-in_tsv="${1:-genomes_metadata.tsv}"
-if [[ -f "$in_tsv" ]]
+in_tsv="${1:-s-latissima-genome-v2/genomes_metadata.tsv}"
+if [[ -r "$in_tsv" ]]
 then
   mapfile -t labels < <(grep -v "#" "$in_tsv" | cut -f1)
 else
-  echo "Error: input TSV ($in_tsv) not found."
+  echo "Cannot read input TSV: $in_tsv."
+  exit 1
 fi
 
 # Compile BUSCO summary JSON files (if needed)

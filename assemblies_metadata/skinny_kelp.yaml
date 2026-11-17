@@ -10,7 +10,8 @@ sample:
 assembly:
   version: v1
   level: chromosome
-  current_representative: true
+  assembly_series: skinny_kelp
+  version_order: 1
   source:
     location: local
     method: file
@@ -21,8 +22,3 @@ reads:
     platform: illumina
     method: script
     locator: saccharina_reads_by_sex.R
-relationships:
-  assembly_series: skinny_kelp
-  previous_version: null
-analysis:
-  groups: [related_species, Saccharina, US]

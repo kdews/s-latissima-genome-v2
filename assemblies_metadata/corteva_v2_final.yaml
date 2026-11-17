@@ -10,7 +10,8 @@ sample:
 assembly:
   version: v2_final
   level: chromosome
-  current_representative: true
+  assembly_series: corteva
+  version_order: 5
   source:
     location: local
     method: file
@@ -24,11 +25,7 @@ reads:
       locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_ONT_raw_reads_Part[12].fastq
     platform: nanopore
   analysis:
+    group: s_latissima_us
     platform: illumina
     method: script
     locator: saccharina_reads_by_sex.R
-relationships:
-  assembly_series: corteva
-  previous_version: corteva_v2_ha
-analysis:
-  groups: [s_latissima, US, corteva]

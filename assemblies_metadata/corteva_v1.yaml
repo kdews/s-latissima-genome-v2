@@ -1,5 +1,5 @@
 label: corteva_v1
-pretty_label: "Saccharina latissima (US v1 draft)"
+pretty_label: "Saccharina latissima (US v2 draft)"
 taxonomy:
   species: Saccharina latissima
 sample:
@@ -8,9 +8,10 @@ sample:
   sex: U
   ploidy: 1
 assembly:
-  version: v1
+  version: v2 draft
   level: chromosome
-  current_representative: false
+  assembly_series: corteva
+  version_order: 1
   source:
     location: local
     method: file
@@ -24,11 +25,7 @@ reads:
       locator: /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_ONT_raw_reads_Part[12].fastq
     platform: nanopore
   analysis:
+    group: s_latissima_us
     platform: illumina
     method: script
     locator: saccharina_reads_by_sex.R
-relationships:
-  assembly_series: corteva
-  previous_version: null
-analysis:
-  groups: [s_latissima, US, corteva]

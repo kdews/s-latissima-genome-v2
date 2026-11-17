@@ -10,7 +10,8 @@ sample:
 assembly:
   version: Bratelund 2024
   level: contig
-  current_representative: true
+  assembly_series: ilvo
+  version_order: 1
   source:
     location: remote
     method: ncbi
@@ -23,8 +24,3 @@ reads:
       method: sra
       locator: SRR26857257
     platform: illumina
-relationships:
-  assembly_series: ilvo
-  previous_version: null
-analysis:
-  groups: [s_latissima, Norway, ilvo]

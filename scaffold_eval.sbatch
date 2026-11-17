@@ -79,8 +79,8 @@ echo
 nthrd="${SLURM_CPUS_PER_TASK:-1}"
 
 # Input
-in_tsv="${1:-genomes_metadata.tsv}"
-if [[ -f "$in_tsv" ]]
+in_tsv="${1:-s-latissima-genome-v2/genomes_metadata.tsv}"
+if [[ -r $in_tsv ]]
 then
   echo "Using TSV: $in_tsv"
   # Assembly labels
@@ -88,7 +88,7 @@ then
   mapfile -t pretty_labels < <(grep -v "#" "$in_tsv" | cut -f2)
   echo "Found ${#labels[@]} assembly labels."
 else
-  echo "Error: input TSV ($in_tsv) not found."
+  echo "Error: Cannot read input TSV: $in_tsv"
   exit 1
 fi
 echo

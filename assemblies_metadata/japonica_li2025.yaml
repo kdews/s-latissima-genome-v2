@@ -10,7 +10,8 @@ sample:
 assembly:
   version: Li 2025
   level: chromosome
-  current_representative: true
+  assembly_series: japonica_li2025
+  version_order: 1
   source:
     location: remote
     method: figshare
@@ -29,8 +30,3 @@ reads:
     method: sra
     female: SRR12549470
     male: SRR13212431
-relationships:
-  assembly_series: japonica_li2025
-  previous_version: null
-analysis:
-  groups: [related_species, Saccharina, China]

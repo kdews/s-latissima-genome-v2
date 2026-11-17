@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH -J get_data
 #SBATCH -o %x_logs/%x_%j.log
-#SBATCH -p oneweek
+#SBATCH -p largemem
 #SBATCH --time=12:00:00
 #SBATCH --cpus-per-task=12
-#SBATCH --mem=185g
+#SBATCH --mem=278g
 
 # Script variables
 # Extract job name from script
@@ -30,30 +30,36 @@ SDR and depth analyses.
 Usage: sbatch $job_name.sbatch <in_tsv>
 
 Required input:
-  in_tsv      TSV with 20 named columns (see below), with commented (#) header
+  in_tsv      TSV with 26 named columns (see below), with commented (#) header
 
 Input TSV columns:
-  <Column_Name>           <Example>
-  1. Label                corteva_v2
-  2. Pretty_Name          Saccharina latissima (US v2)
-  3. Genome_Source        local
-  4. Genome_Method        file
-  5. Genome_Locator       /project2/noujdine_61/kdeweese/latissima/all_s_latissima_assemblies/corteva_v2/Slattisima_v0.2_Genome_Polished_111925.fasta
-  6. Genome_Selector      [blank]*
-  7. Assembly_Reads_Source          local
-  8. Assembly_Reads_Method          glob
-  9. Assembly_Reads_Platform        nanopore
-  10. Assembly_Reads_Locator        /path/to/assembly_reads/*.fastq
-  11. Analysis_Reads_Platform       illumina
-  12. Analysis_Reads_Method         script
-  13. Analysis_Reads_Locator        saccharina_reads_by_sex.R
-  14. Analysis_Reads_Female_Locator [blank for method=script]
-  15. Analysis_Reads_Male_Locator   [blank for method=script]
-  16. Annotation_GFF                annotation.gff3.gz**
-  17. Sample_ID                     SL-CT1-FG3
-  18. Region                        US
-  19. Sex                           V
-  20. Ploidy                        1
+  <Column_Name>                      <Example>
+  1. Label                             corteva_v2
+  2. Pretty_Label                      Saccharina latissima (US v2)
+  3. Sample_ID                         SL-CT1-FG-3
+  4. Species                           Saccharina latissima
+  5. Region                            US
+  6. Sex                               U
+  7. Ploidy                            1
+  8. Assembly_Series                   corteva
+  9. Version                           v2
+  10. Version_Order                     2
+  11. Assembly_Level                    chromosome
+  12. Genome_Source                     local
+  13. Genome_Method                     file
+  14. Genome_Locator                    /path/to/genome.fasta
+  15. Genome_Selector                   [blank]*
+  16. Assembly_Reads_Source             local
+  17. Assembly_Reads_Method             glob
+  18. Assembly_Reads_Platform           nanopore
+  19. Assembly_Reads_Locator            /path/to/assembly_reads/*.fastq
+  20. Analysis_Reads_Group              s_latissima_us
+  21. Analysis_Reads_Platform           illumina
+  22. Analysis_Reads_Method             script
+  23. Analysis_Reads_Locator            saccharina_reads_by_sex.R
+  24. Analysis_Reads_Female_Locator     [blank for method=script]
+  25. Analysis_Reads_Male_Locator       [blank for method=script]
+  26. Annotation_GFF                    annotation.gff3.gz**
 
 * Assembly and analysis read fields are independently optional. Blank assembly
   read fields do not prevent genome or analysis-read retrieval.
@@ -61,6 +67,11 @@ Input TSV columns:
 ** Optional. For local assemblies, provide the full GFF path. For Figshare,
 Dataverse, or url_tar sources, provide the GFF filename. For direct URLs,
 provide either the full GFF URL or a filename beside the genome URL.
+
+Assembly reads are named using Assembly_Series. Analysis_Reads_Group identifies
+shared read sets for downstream processing. Analysis lists remain per label
+because script-selected reads can depend on Sample_ID. Version_Order must be
+a positive integer unique within each Assembly_Series.
 
 Supported genome sources:
   file        local FASTA (plain or gzip-compressed)
@@ -101,6 +112,7 @@ Requires:
  - NCBI Datasets command-line tools (CLI) v18.31.0+ (https://www.ncbi.nlm.nih.gov/datasets/docs/v2/command-line-tools/)
  - UnZip v6.00+ (https://infozip.sourceforge.net/UnZip.html)
  - samtools v1.23+ (https://www.htslib.org)
+ - Entrez Direct (efetch) and wget in the sratools environment
  - SRA Toolkit v3.4.1+ (https://github.com/ncbi/sra-tools)"
 }
 # Catch help flag or missing argument(s)
@@ -634,6 +646,7 @@ get_analysis_sra () {
     NQUIRE_HELPER=wget efetch -db sra -id "$accession" -format runinfo \
       > "reads/${accession}_runinfo.csv" \
       || die "Could not get metatdata for $accession"
+    log "Metadata of $accession saved to: reads/${accession}_runinfo.csv"
     conda deactivate
 
     out1="reads/${accession}_1.fastq.gz"
@@ -683,32 +696,54 @@ get_analysis_sra () {
 }
 
 # Check TSV column names
-exp_header=$'# Label\tPretty_Label\tGenome_Source\tGenome_Method\tGenome_Locator\tGenome_Selector\tAssembly_Reads_Source\tAssembly_Reads_Method\tAssembly_Reads_Platform\tAssembly_Reads_Locator\tAnalysis_Reads_Platform\tAnalysis_Reads_Method\tAnalysis_Reads_Locator\tAnalysis_Reads_Female_Locator\tAnalysis_Reads_Male_Locator\tAnnotation_GFF\tSample_ID\tRegion\tSex\tPloidy'
+exp_header=$'# Label\tPretty_Label\tSample_ID\tSpecies\tRegion\tSex\tPloidy\tAssembly_Series\tVersion\tVersion_Order\tAssembly_Level\tGenome_Source\tGenome_Method\tGenome_Locator\tGenome_Selector\tAssembly_Reads_Source\tAssembly_Reads_Method\tAssembly_Reads_Platform\tAssembly_Reads_Locator\tAnalysis_Reads_Group\tAnalysis_Reads_Platform\tAnalysis_Reads_Method\tAnalysis_Reads_Locator\tAnalysis_Reads_Female_Locator\tAnalysis_Reads_Male_Locator\tAnnotation_GFF'
 IFS= read -r header < "$in_tsv" # read just first line of TSV
 header="${header%$'\r'}" # strip carriage return
 [[ "$header" == "$exp_header" ]] || die "Expected TSV header: $exp_header"
 # Verify TSV format
 awk -F '\t' '
-  NR > 1 && $0 !~ /^#/ && NF > 0 && NF != 20 {
-    printf "ERROR: line %d has %d TSV columns; expected 20\n", NR, NF > "/dev/stderr"
+  NR > 1 && $0 !~ /^#/ && NF > 0 && NF != 26 {
+    printf "ERROR: line %d has %d TSV columns; expected 26\n", NR, NF > "/dev/stderr"
     bad = 1
+  }
+  NR > 1 && $0 !~ /^#/ && NF == 26 {
+    if ($1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ || labels[$1]++) {
+      printf "ERROR: line %d has an invalid or duplicate Label: %s\n", NR, $1 > "/dev/stderr"
+      bad = 1
+    }
+    if ($8 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/) {
+      printf "ERROR: line %d has an invalid Assembly_Series: %s\n", NR, $8 > "/dev/stderr"
+      bad = 1
+    }
+    if ($10 !~ /^[1-9][0-9]*$/) {
+      printf "ERROR: line %d has an invalid Version_Order: %s\n", NR, $10 > "/dev/stderr"
+      bad = 1
+    }
+    key = $8 SUBSEP $10
+    if (key in versions) {
+      printf "ERROR: labels %s and %s repeat Version_Order %s in Assembly_Series %s\n", versions[key], $1, $10, $8 > "/dev/stderr"
+      bad = 1
+    }
+    versions[key] = $1
   }
   END { exit bad }
 ' "$in_tsv" || exit 1
 # Parse TSV using file separator IFS for "read"
 awk -F '\t' -v OFS='\034' '
   NR > 1 && $0 !~ /^#/ && NF > 0 {
-    print $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+    sub(/\r$/, "")
+    print $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
   }
 ' "$in_tsv" > "$parsed"
 
 # Iterate through parsed TSV
 declare -A seen_labels=()
-while IFS=$'\034' read -r label pretty_label genome_source genome_method \
+while IFS=$'\034' read -r label pretty_label sample_id species region sex ploidy \
+  assembly_series version version_order assembly_level genome_source genome_method \
   genome_locator genome_selector assembly_reads_source assembly_reads_method \
-  assembly_reads_platform assembly_reads_locator analysis_reads_platform \
-  analysis_reads_method analysis_reads_locator analysis_reads_female_locator \
-  analysis_reads_male_locator annotation_gff sample_id region sex ploidy extra
+  assembly_reads_platform assembly_reads_locator analysis_reads_group \
+  analysis_reads_platform analysis_reads_method analysis_reads_locator \
+  analysis_reads_female_locator analysis_reads_male_locator annotation_gff extra
 do
   label="${label%$'\r'}"
   assembly_reads_locator="${assembly_reads_locator%$'\r'}"
@@ -768,8 +803,8 @@ do
   then
     log "$label: no assembly reads specified. Skipping..."
   else
-    # Strip version from label (same reads for all versions)
-    clean_label="${label%%_v[0-9]*}"
+    # Use the explicit assembly series to share construction reads across versions.
+    clean_label="$assembly_series"
     if [[ "$assembly_reads_platform" == illumina ]]
     then
       assembly_outputs=(
@@ -791,14 +826,18 @@ do
     fi
   fi
 
-  # Analysis reads are currently paired-end Illumina. Local script methods
-  # generate lists without copying FASTQs; SRA retains sex assignments.
+  # Analysis reads are paired-end Illumina 
+  # Local script methods generate lists without copying FASTQs
   if [[ -z "$analysis_reads_platform" && -z "$analysis_reads_method" && \
         -z "$analysis_reads_locator" && -z "$analysis_reads_female_locator" && \
-        -z "$analysis_reads_male_locator" ]]
+        -z "$analysis_reads_male_locator" && -z "$analysis_reads_group" ]]
   then
     log "$label: no analysis reads specified. Skipping..."
   else
+    analysis_reads_group="${analysis_reads_group:-$label}"
+    [[ "$analysis_reads_group" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+      || die "$label: invalid Analysis_Reads_Group: $analysis_reads_group"
+    log "$label: analysis read group=$analysis_reads_group"
     [[ "$analysis_reads_platform" == illumina ]] \
       || die "$label: Analysis_Reads_Platform must be illumina"
     case "$analysis_reads_method" in

@@ -12,7 +12,8 @@ if (require(showtext)) {
 
 ## Input
 if (interactive()) {
-  wd <- "/project2/noujdine_61/kdeweese/latissima/corteva_genome"
+  # wd <- "/project2/noujdine_61/kdeweese/latissima/corteva_genome"
+  wd <- "/scratch2/kdeweese/corteva_genome"
   setwd(wd)
   in_tsv <- "s-latissima-genome-v2/genomes_metadata.tsv" # input genome TSV
   scripts_dir <- "s-latissima-genome-v2"
@@ -21,21 +22,13 @@ if (interactive()) {
   in_tsv <- line_args[1]
   scripts_dir <- line_args[2]
 }
-# Order for label factor
-lbl_order <- c(
-  "latissima.*US",
-  "latissima.*France",
-  "^(?!.*(US|France)).*latissima",
-  "^(?!.*latissima)"
-)
-# Order for region factor
-rg_order <- c("US", "France", "Norway", "China", "Peru")
 # Cutoff (in bp) for contig length bar plots
 my_limit <- 1e6
 
 ## Output
 # Plot filenames
 vio_plot <- "scaffold_sizes_violin_log.png"
+vio_plot_f <- "scaffold_sizes_violin_log_filt.png"
 bar_len_cut_plot <- paste0("scaffold_sizes_bar_cut_",
                            number(my_limit, big.mark = ""), ".png")
 bar_n50_cut_plot <- "scaffold_sizes_bar_cut_n50.png"
@@ -94,7 +87,7 @@ sumDf <- function(df) {
   sum_df <- df %>%
     # Convert "Length" column from bp to Mb
     mutate(`Length (Mb)` = Length*1e-6) %>%
-    group_by(Label, Pretty_Label, Species, Region, Version) %>%
+    group_by(Label, Pretty_Label, Species, Region, Assembly_Series, Version) %>%
     summarize(N50 = Biostrings::N50(`Length (Mb)`),
               L50 = sum(`Length (Mb)` > N50),
               total = sum(`Length (Mb)`),
@@ -138,8 +131,9 @@ violinPlot <- function(idx, sum_idx, n50 = NULL) {
     #                    scale = vio_scale) +
     # Boxplot: overlay statistical summary
     geom_boxplot(width = 0.1) +
-    facet_wrap(~ Species + Region, scales = "free_x", space = "free_x",
-               nrow = 1) +
+    # facet_wrap(~ Species + Region + Assembly_Series,
+    facet_wrap(~ Species + Region,
+               scales = "free_x", space = "free_x", nrow = 1) +
     # Label assembly total size and n()
     geom_text(data = sum_idx, mapping = aes(x = Label, y = max_y * 5),
               label = size_lab) +
@@ -231,40 +225,16 @@ genome_tab <- read.table(in_tsv, sep = "\t", header = T, fill = NA,
                          comment.char = "", check.names = F)
 colnames(genome_tab) <- gsub("#| ", "", colnames(genome_tab))
 genome_tab <- genome_tab %>%
-  # Keep only labels
-  select(Label, Pretty_Label) %>%
   # Derive assembly paths
   mutate(Assembly = file.path("assemblies", paste0(Label, ".fa"))) %>%
-  mutate(
-    # Mark polished and draft assemblies
-    AssemblyType = case_when(
-      grepl("polish", Pretty_Label) ~ ".p",
-      grepl("draft", Pretty_Label) ~ ".d",
-      .default = ""
-    ),
-    # Get region from assembly labels
-    Region = gsub("^.*\\(([A-Za-z]+)[ ;].*\\)$", "\\1", Pretty_Label, perl = T),
-    Region = factor(Region, levels = rg_order),
-    .after = Pretty_Label
-  ) %>%
+  # Factor variables for plots
   rowwise() %>%
-  mutate(
-    # Parse version from assembly labels
-    Version = case_when(
-      # Parse vN
-      grepl("v[0-9]", Pretty_Label) ~ gsub("^.*(v[0-9]).*$", "\\1", Pretty_Label),
-      # Parse year of cited publication
-      grepl("et al\\.", Pretty_Label) ~
-        gsub("^.*et al\\.\\ ([0-9]+)\\).*$", "\\1", Pretty_Label),
-      .default = "none"
-    ),
-    Version = paste0(Version, AssemblyType),
-    # Parse and factor species names
-    Species = gsub(" \\(.*$", "", Pretty_Label),
-    Species = formatSpc(Species),
-    Species = factor(Species, levels = unique(Species)),
-    .after = Pretty_Label
-  ) %>%
+  # Format species names
+  mutate(Species = formatSpc(Species),
+         Species = factor(Species, levels = unique(Species)),
+         Region = factor(Region, levels = unique(Region)),
+         Assembly_Series = factor(Assembly_Series, levels = unique(Assembly_Series)),
+         Pretty_Label = factor(Pretty_Label, levels = unique(Pretty_Label))) %>%
   ungroup()
 fns <- paste0(genome_tab$Assembly, ".fai")
 for (i in 1:length(fns)) {
@@ -279,32 +249,31 @@ for (i in 1:length(fns)) {
     idx <- rbind(idx, idx_temp)
   }
 }
-# Sort "Pretty_Label" column with factor for plotting
-lbl_lvls <- sapply(regex(lbl_order),
-                   grep,
-                   unique(genome_tab$Pretty_Label),
-                   value = T,
-                   perl = T) %>%
-  unname() %>%
-  unlist()
 idx <- idx %>%
   # Merge by "Label" column
   left_join(genome_tab, by = join_by(Label)) %>%
-  # Factor "Pretty_Label"
-  mutate(Pretty_Label = factor(Pretty_Label, levels = lbl_lvls)) %>%
+  # # Factor "Pretty_Label"
+  # mutate(Pretty_Label = factor(Pretty_Label, levels = lbl_lvls)) %>%
   arrange(Pretty_Label) %>%
   # Factor "Label" to match "Pretty_Label"
   mutate(Label = factor(Label, levels = unique(Label))) %>%
   group_by(Pretty_Label) %>%
   arrange(desc(Length), .by_group = T) %>%
+  ungroup() %>%
   # Convert ID characters into numeric
   mutate(ID_num = as.numeric(str_remove_all(str_remove_all(ID, ".*_"),
                                             "[^0-9]")))
 # Summarize data frame
 sum_idx <- sumDf(idx)
 
+# Filter for most recent versions only
+idx_f <- idx %>%
+  filter(Version_Order == max(Version_Order), .by = c(Species, Region))
+sum_idx_f <- sumDf(idx_f)
+
 # Plot assembly length distributions
 p_l <- violinPlot(idx, sum_idx, n50 = T)
+p_l_f <- violinPlot(idx_f, sum_idx_f, n50 = T)
 p_d <- distPlot(idx, my_limit)
 p_d_n50 <- distPlot(idx, "n50")
 
@@ -334,7 +303,7 @@ p_comp_v2 <- ggplot(comp_v2_idx, aes(x = n, y = Length)) +
 # Compare polished and unpolished US assemblies
 comp_polish_idx <- idx %>%
   filter(Species == "S. latissima", Region == "US",
-         Version %in% c("v2", "v2.p")) %>%
+         Version %in% c("v2", "v2_polished")) %>%
   group_by(Label) %>%
   arrange(desc(Length), .by_group = T) %>%
   mutate(`Length (Mb)` = Length/1e6,
@@ -369,10 +338,13 @@ p_comp_polish <- ggplot(comp_polish_idx,
   theme_bw()
 
 ## Save plots
-# Violin
+# Violins
 vio_width <- 9 * dim(sum_idx)[1]/5 # calculate width based on n assemblies
 saveMyPlot(fname = vio_plot, p = p_l, wd = vio_width, ht = 7,
            msg = "assembly violin plots")
+vio_width_f <- 9 * dim(sum_idx_f)[1]/5 # calculate width based on n assemblies
+saveMyPlot(fname = vio_plot_f, p = p_l_f, wd = vio_width_f, ht = 7,
+           msg = "filtered assembly violin plots")
 # Bar plots
 saveMyPlot(fname = bar_len_cut_plot, p = p_d, wd = 10, ht = 6,
            msg = paste0("contig length bar plots (cutoff = ",

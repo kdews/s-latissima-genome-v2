@@ -28,9 +28,17 @@ fi
 # Help message
 show_help () {
   echo "\
-Convert one YAML file per assembly into a 20-column metadata TSV. The reads
-block and assembly.annotation_gff are optional; missing values receive blank
-TSV fields. The sample block supplies Sample_ID, Region, Sex, and Ploidy.
+Parses one YAML file per assembly into a 26-column metadata TSV. Each YAML
+defines the assembly label, species, sample information, assembly series,
+version, assembly level, and data sources. Labels must be unique. Version order
+must be a positive integer and cannot be repeated within the same series.
+
+Optional keys:
+  assembly.annotation_gff
+  reads
+
+If analysis reads are defined but 'reads.analysis.group' is omitted or null, the
+assembly label is used. Missing values produce blank TSV fields.
 
 Usage: sbatch $job_name.sbatch
 
