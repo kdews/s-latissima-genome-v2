@@ -49,6 +49,8 @@ analysis as follows:
   - UV: both
 Assemblies without designated female/male read lists are skipped.
 --dry-run validates inputs, writes manifests, and prints jobs without submitting.
+Trimmed read pairs and YGS counts/traces are shared in $main_outdir/prepared/.
+Preparation jobs run once per read set before dependent analysis jobs.
 
 Usage: sbatch $job_name.sbatch [genomes_metadata.tsv] [--dry-run]
 
@@ -203,9 +205,22 @@ else
   exit 1
 fi
 
+# Submit preparation once per read set; analysis jobs retain runtime fallback.
+declare -A depth_prep_ids ygs_prep_ids
+
 # Iterate through $plan_tsv
-while IFS=$'\t' read -r label genome sex n_samples; do
+while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set; do
   depth_out="$main_outdir/$depth_outdir/$label"
+  if [[ -z "${depth_prep_ids[$depth_set]:-}" ]]; then
+    if [[ "$dry_run" == true ]]; then
+      echo "PLAN prepare depth: $label --array=1-$n_samples"
+      depth_prep_ids[$depth_set]=dry-run
+    else
+      depth_prep_ids[$depth_set]="$(sbatch --parsable --array="1-$n_samples"%4 \
+        -o "%x_logs/%x_prep_${label}_%j_%a.log" "$scripts_dir/$depth_job" \
+        "$genome" "$scripts_dir" --prepare-only)" || exit 1
+    fi
+  fi
   if [[ "$dry_run" == true ]]; then
     echo "PLAN depth: $label --array=1-$n_samples; depth_plot afterok"
   else
@@ -238,7 +253,9 @@ while IFS=$'\t' read -r label genome sex n_samples; do
     module purge
     set -x
     d_id="$(sbatch --parsable --array="1-$n_samples"%4 \
-      -o "%x_logs/%x_${label}_%j_%a.log" "$scripts_dir/$depth_job" "$genome")" \
+      --dependency="afterok:${depth_prep_ids[$depth_set]}" \
+      -o "%x_logs/%x_${label}_%j_%a.log" "$scripts_dir/$depth_job" "$genome" \
+      "$scripts_dir")" \
       || exit 1
     { set +x; } 2>/dev/null
     set -x
@@ -250,11 +267,25 @@ while IFS=$'\t' read -r label genome sex n_samples; do
   [[ "$sex" != UV ]] || targets=(U V)
   for target in "${targets[@]}"; do
     ygs_out="$main_outdir/$ygs_outdir/$label/target_$target"
+    ygs_set="${male_set}_${female_set}"
+    [[ "$target" != V ]] || ygs_set="${female_set}_${male_set}"
+    if [[ -z "${ygs_prep_ids[$ygs_set]:-}" ]]; then
+      if [[ "$dry_run" == true ]]; then
+        echo "PLAN prepare YGS: $label target_$target"
+        ygs_prep_ids[$ygs_set]=dry-run
+      else
+        ygs_prep_ids[$ygs_set]="$(sbatch --parsable \
+          -o "%x_logs/%x_prep_${label}_${target}_%j.log" \
+          "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir" \
+          --prepare-only)" || exit 1
+      fi
+    fi
     if [[ "$dry_run" == true ]]; then
       echo "PLAN YGS: $label target_$target; ygs_plot afterok"
     else
       set -x
       y_id="$(sbatch --parsable -o "%x_logs/%x_${label}_%j.log" \
+        --dependency="afterok:${ygs_prep_ids[$ygs_set]}" \
         "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir")" \
         || exit 1
       { set +x; } 2>/dev/null

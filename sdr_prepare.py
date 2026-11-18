@@ -7,12 +7,25 @@ Called by sdr_id.sbatch before any jobs are submitted.
 
 import argparse
 import csv
+import hashlib
+import json
 import re
+import sys
 from pathlib import Path
 
 
 def fail(message):
     raise SystemExit("Error: " + message)
+
+
+def read_key(profile, paths):
+    """Identify reads and settings without hashing entire FASTQ files."""
+    inputs = []
+    for raw in paths:
+        path = Path(raw).expanduser().resolve()
+        stat = path.stat()
+        inputs.append([str(path), stat.st_size, stat.st_mtime_ns])
+    return hashlib.sha256(json.dumps([profile, inputs]).encode()).hexdigest()
 
 
 def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv"):
@@ -113,7 +126,12 @@ def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv
                     fail(f'{ygs}: read list changed; move the previous direction directory before rerunning')
                 dest.write_text(content)
             (ygs / 'assembly_metadata.tsv').write_text((depth / 'assembly_metadata.tsv').read_text())
-        plan.append([label, str(genome), sex, str(len(samples))])
+        # Group equivalent read sets independently of assembly and list order
+        depth_set = read_key('depth', sorted(lists['female'] + lists['male']))
+        female_set = read_key('ygs', sorted(lists['female']))
+        male_set = read_key('ygs', sorted(lists['male']))
+        plan.append([label, str(genome), sex, str(len(samples)),
+                     depth_set, female_set, male_set])
         print(f'{label}: Sample_ID={row["Sample_ID"]}; Region={row["Region"]}; Sex={sex}; '
               f'Ploidy={row["Ploidy"]}; {len(samples)} samples, {len(pairs)} read pairs')
     with (out / plan_filename).open('w') as fh:
@@ -121,6 +139,16 @@ def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv
 
 
 def main():
+    # Use read-key mode when the first command-line argument is --read-key
+    if len(sys.argv) > 1 and sys.argv[1] == '--read-key':
+        parser = argparse.ArgumentParser(description='Identify shared read preparation')
+        parser.add_argument('--read-key', dest='profile', required=True)
+        parser.add_argument('--list', type=Path)
+        parser.add_argument('paths', nargs='*')
+        args = parser.parse_args()
+        paths = sorted(args.list.read_text().splitlines()) if args.list else args.paths
+        print(read_key(args.profile, paths))
+        return
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("metadata", type=Path, help="Genome metadata TSV")
     parser.add_argument("outdir", type=Path, help="Main SDR output directory")
