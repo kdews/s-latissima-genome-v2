@@ -64,6 +64,25 @@ Input:
 Output:
   $main_outdir/
   ├── $plan_tsv
+  ├── prepared/                                                   # read preparation shared across assemblies
+  │   ├── trimmed/
+  │   │   └── <trim_id>/                                          # one input R1/R2 pair and trimming profile
+  │   │       ├── R1.fastq.gz
+  │   │       ├── R2.fastq.gz
+  │   │       ├── fastp.html
+  │   │       ├── fastp.json
+  │   │       ├── complete                                        # successful trimming marker
+  │   │       └── .lock                                           # coordinates concurrent preparation
+  │   └── ygs/
+  │       └── <pool_id>/                                          # one read pool and Jellyfish counting profile
+  │           ├── reads.jf                                        # shared Jellyfish counts
+  │           ├── count.complete                                  # successful counting marker
+  │           ├── .lock                                           # coordinates concurrent preparation
+  │           └── min<1|5>/                                       # frequency threshold: ss=1, os=5; created as needed
+  │               ├── reads.fasta.gz
+  │               ├── reads.trace.gz
+  │               ├── reads.trace_result
+  │               └── complete                                    # successful trace preparation marker
   ├── $ygs_outdir/
   │   └── <label>/target_<U|V>/
   │       ├── <windowsize>_windows.contig_result                  # log for YGS contig mode
@@ -190,6 +209,7 @@ for script in "$prep_job" "$ygs_job" "$depth_job" "$ygs_plot" "$depth_plot"; do
 done
 
 # Parse metadata for job submission
+echo "Parsing metadata for each genome in $in_tsv..."
 mkdir -p "$main_outdir"
 set -x
 if python3 "$scripts_dir/$prep_job" "$in_tsv" "$main_outdir" "$ygs_outdir" \
@@ -204,25 +224,57 @@ else
   echo 'Error: SDR preparation failed.' >&2
   exit 1
 fi
+echo
 
 # Submit preparation once per read set; analysis jobs retain runtime fallback.
 declare -A depth_prep_ids ygs_prep_ids
 
+# Print the same arguments as sbatch, quoting paths safely for review.
+print_sbatch () {
+  printf '%q ' sbatch "$@"
+  printf '\n'
+}
+if [[ "$dry_run" == true ]]; then
+  echo 'Dry run mode: DEPTH_PREP_*/DEPTH_*/YGS_PREP_*/YGS_* = job ID placeholders'
+fi
+
 # Iterate through $plan_tsv
-while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set; do
+while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set max_sample_gib; do
+  echo "$label"
   depth_out="$main_outdir/$depth_outdir/$label"
   if [[ -z "${depth_prep_ids[$depth_set]:-}" ]]; then
     if [[ "$dry_run" == true ]]; then
-      echo "PLAN prepare depth: $label --array=1-$n_samples"
-      depth_prep_ids[$depth_set]=dry-run
+      print_sbatch --parsable --array="1-$n_samples"%4 \
+        -o "%x_logs/%x_prep_${label}_%j_%a.log" "$scripts_dir/$depth_job" \
+        "$genome" "$scripts_dir" --prepare-only
+      depth_prep_ids[$depth_set]="DEPTH_PREP_$label"
     else
       depth_prep_ids[$depth_set]="$(sbatch --parsable --array="1-$n_samples"%4 \
         -o "%x_logs/%x_prep_${label}_%j_%a.log" "$scripts_dir/$depth_job" \
         "$genome" "$scripts_dir" --prepare-only)" || exit 1
     fi
   fi
+  d_cmd=(
+    --parsable
+    --array="1-$n_samples"%4
+    --dependency="afterok:${depth_prep_ids[$depth_set]}"
+    -o "%x_logs/%x_${label}_%j_%a.log"
+    "$scripts_dir/$depth_job"
+    "$genome"
+    "$scripts_dir"
+  )
+  if (( max_sample_gib > 16 )); then
+    d_cmd=(
+      -p largemem
+      --mem=900g
+      --time=4-0
+      "${d_cmd[@]}"
+    )
+  fi
   if [[ "$dry_run" == true ]]; then
-    echo "PLAN depth: $label --array=1-$n_samples; depth_plot afterok"
+    print_sbatch "${d_cmd[@]}"
+    print_sbatch --dependency="afterok:DEPTH_$label" \
+      "$scripts_dir/$depth_plot" "$depth_out" "$scripts_dir"
   else
     index_missing=false
     for suffix in bwt.2bit.64 0123 amb ann pac; do
@@ -252,10 +304,7 @@ while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set
     fi
     module purge
     set -x
-    d_id="$(sbatch --parsable --array="1-$n_samples"%4 \
-      --dependency="afterok:${depth_prep_ids[$depth_set]}" \
-      -o "%x_logs/%x_${label}_%j_%a.log" "$scripts_dir/$depth_job" "$genome" \
-      "$scripts_dir")" \
+    d_id="$(sbatch "${d_cmd[@]}")" \
       || exit 1
     { set +x; } 2>/dev/null
     set -x
@@ -271,20 +320,28 @@ while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set
     [[ "$target" != V ]] || ygs_set="${female_set}_${male_set}"
     if [[ -z "${ygs_prep_ids[$ygs_set]:-}" ]]; then
       if [[ "$dry_run" == true ]]; then
-        echo "PLAN prepare YGS: $label target_$target"
-        ygs_prep_ids[$ygs_set]=dry-run
+        print_sbatch --parsable -o "%x_logs/%x_prep_${label}_${target}_%j.log" \
+          "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir" \
+          --prepare-only
+        ygs_prep_ids[$ygs_set]="YGS_PREP_${label}_$target"
       else
+        set -x
         ygs_prep_ids[$ygs_set]="$(sbatch --parsable \
           -o "%x_logs/%x_prep_${label}_${target}_%j.log" \
           "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir" \
           --prepare-only)" || exit 1
+        { set +x; } 2>/dev/null
       fi
     fi
     if [[ "$dry_run" == true ]]; then
-      echo "PLAN YGS: $label target_$target; ygs_plot afterok"
+      print_sbatch --parsable -o "%x_logs/%x_${label}_%j.log" \
+        --dependency="afterok:${ygs_prep_ids[$ygs_set]}" \
+        "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir"
+      print_sbatch --dependency="afterok:YGS_${label}_$target" \
+        "$scripts_dir/$ygs_plot" "$ygs_out" "$scripts_dir"
     else
       set -x
-      y_id="$(sbatch --parsable -o "%x_logs/%x_${label}_%j.log" \
+      y_id="$(sbatch --parsable -o "%x_logs/%x_${label}_${target}_%j.log" \
         --dependency="afterok:${ygs_prep_ids[$ygs_set]}" \
         "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir")" \
         || exit 1
@@ -295,6 +352,7 @@ while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set
       { set +x; } 2>/dev/null
     fi
   done
+  echo
 done < "$main_outdir/$plan_tsv"
 
 # Print date and time

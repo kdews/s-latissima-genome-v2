@@ -182,16 +182,23 @@ echo
 # Parse read_pairs.tsv to align samples to genome assembly
 work_dir="$(mktemp -d)"
 bam_args=()
-while IFS=$'\t' read -r sample read_sex library pair_id R1 R2; do
+while IFS=$'\t' read -r sample read_sex library pair_id R1 R2 model; do
   [[ "$sample" == "$indiv_id" ]] || continue # select line(s) by ID match
   if ! [[ "$read_sex" == "$sex" && -r "$R1" && -r "$R2" ]]; then
     echo 'Error: Invalid read manifest row.' >&2
     exit 1
   fi
+  # Use sequencing model when available; otherwise retain fastp auto-detection.
+  case "${model,,}" in
+    *nextseq*|*novaseq*) poly_g_args=(--trim_poly_g --poly_g_min_len 8) ;;
+    *hiseq*|*miseq*) poly_g_args=(--disable_trim_poly_g) ;;
+    *) poly_g_args=() ;;
+  esac
+  echo "Pair=$pair_id; Model=${model:-Unknown}; poly-G=${poly_g_args[*]:-auto}"
   # Share trimming across assemblies; standalone jobs use the same preparation.
+  trim_policy="fastp:detect_adapter_for_pe:poly_g=${poly_g_args[*]:-auto}"
   trim_id="$(python3 "$scripts_dir/sdr_prepare.py" --read-key \
-    'fastp-v1:detect_adapter_for_pe:trim_poly_g:poly_g_min_len=8' "$R1" "$R2")" \
-    || exit 1
+    "$trim_policy" "$R1" "$R2")" || exit 1
   trim_dir="$shared_out/$trim_id"
   mkdir -p "$trim_dir" || exit 1
   trim_R1="$trim_dir/R1.fastq.gz"
@@ -206,8 +213,7 @@ while IFS=$'\t' read -r sample read_sex library pair_id R1 R2; do
       fastp --in1 "$R1" --in2 "$R2" \
         --out1 "$trim_work/R1.fastq.gz" --out2 "$trim_work/R2.fastq.gz" \
         --detect_adapter_for_pe \
-        --trim_poly_g \
-        --poly_g_min_len 8 \
+        "${poly_g_args[@]}" \
         --thread "$nthrd" \
         --html "$trim_work/fastp.html" \
         --json "$trim_work/fastp.json" \
@@ -250,12 +256,13 @@ fi
 rm -rf -- "$work_dir"
 
 # GATK4 Spark parameters
-# Save 4gb for driver/off-heap and other threads
-driver_mem=4000 # unit=M
-exec_mem="$(( mem_mb * 9 / 10 - driver_mem ))" # unit=M
-offheap_mem=2000 # off-heap shuffle buffer (unit=M)
-# Partitons used for shuffling data during joins/aggregations
-shuffle_parts="$(( nthrd * 3 ))" # avoid default 200
+# Leave half the allocation for /tmp, overhead, and other processes
+heap_mb="$(( mem_mb / 2 ))"
+# Budget memory for large jobs
+if [[ "$SLURM_JOB_PARTITION" == largemem ]]; then
+  heap_cap_mb="$(( 350 * 1024 ))"
+  (( heap_mb > heap_cap_mb )) && heap_mb="$heap_cap_mb"
+fi
 
 # Load GATK4
 module purge
@@ -266,22 +273,13 @@ gatk --version || exit 1
 work_dir="$(mktemp -d)"
 indiv_bam="${indiv_id}.sorted.bam" # one BAM for biological individual
 set -x
-gatk MarkDuplicatesSpark -R "$genome" --tmp-dir "$work_dir" "${bam_args[@]}" \
+gatk --java-options "-Xmx${heap_mb}M" \
+  MarkDuplicatesSpark -R "$genome" --tmp-dir "$work_dir" "${bam_args[@]}" \
   -O "$depth_out/bams/$indiv_bam" \
   -VS LENIENT \
   --spark-master "local[$nthrd]" \
   --conf spark.local.dir="$work_dir" \
   --conf spark.task.cpus=1 \
-  --conf spark.executor.cores="$nthrd" \
-  --conf spark.driver.cores=1 \
-  --conf spark.executor.memory="${exec_mem}M" \
-  --conf spark.driver.memory="${driver_mem}M" \
-  --conf spark.memory.offHeap.enabled=true \
-  --conf spark.memory.offHeap.size="${offheap_mem}M" \
-  --conf spark.sql.shuffle.partitions="$shuffle_parts" \
-  --conf spark.shuffle.file.buffer=32k \
-  --conf spark.executor.heartbeatInterval="60s" \
-  --conf spark.network.timeout="300s" \
   || exit 1
 { set +x; } 2>/dev/null
 module purge

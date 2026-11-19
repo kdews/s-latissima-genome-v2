@@ -193,7 +193,7 @@ echo "Step 2: YGS method from Carvalho and Clark (2013) supplement"
 # Load Jellyfish env
 conda activate jellyfish
 jellyfish --version || exit 1
-echo "Preparing $k-mers for..."; echo
+echo "Preparing $k-mers for..."
 n_g="$((nthrd > 4 ? 4 : 1))" # concurrent generators (=4 if threads >4)
 count_threads="$((nthrd > n_g ? nthrd - n_g : 1))" # calculate remaining threads
 for reads_type in os ss; do
@@ -231,11 +231,14 @@ for reads_type in os ss; do
         --min-quality=20 -g "$count_work/generators.txt" -G "$n_g" \
         -o "$count_work/reads.jf" || exit 1
       { set +x; } 2>/dev/null
-      check_output "$count_work/reads.jf"
+      [[ -s "$count_work/reads.jf" ]] || exit 1
       rm -f "$pool_dir/count.complete" || exit 1
       mv "$count_work/reads.jf" "$pool_dir/reads.jf" || exit 1
       touch "$pool_dir/count.complete" || exit 1
+    else
+      echo "Previous run results found. Skipping step."
     fi
+    check_output "$pool_dir/reads.jf"
     trace_dir="$pool_dir/min$min_freq"
     if [[ ! -f "$trace_dir/complete" || ! -s "$trace_dir/reads.trace.gz" ]]; then
       trace_work="$(mktemp -d "$pool_dir/.trace.XXXXXX")" || exit 1
@@ -249,13 +252,16 @@ for reads_type in os ss; do
       set -x
       perl "$ygs_pl" kmer_size="$k" mode=trace trace=reads.fasta.gz || exit 1
       { set +x; } 2>/dev/null
-      check_output reads.trace.gz
+      [[ -s reads.trace.gz ]] || exit 1
       touch complete || exit 1
       mkdir -p "$trace_dir" || exit 1
       rm -f "$trace_dir/complete" || exit 1
       mv reads.fasta.gz reads.trace.gz reads.trace_result "$trace_dir/" || exit 1
       mv complete "$trace_dir/complete" || exit 1
+    else
+      echo "Previous run results found. Skipping step."
     fi
+    check_output "$trace_dir/reads.trace.gz"
   ) 9>"$pool_dir/.lock" || exit 1
   ln -sfn "$pool_dir/reads.jf" "$ygs_out/$base.jf" || exit 1
   for suffix in fasta.gz trace.gz trace_result; do
@@ -263,10 +269,11 @@ for reads_type in os ss; do
       || exit 1
   done
   printf '%s\n' "$pool_id" > "$ygs_out/$reads_type.prepared_id" || exit 1
+  echo
 done
 conda deactivate
 [[ "$prepare_only" != true ]] || exit 0
-echo; echo
+echo
 
 echo "Step 3: Run YGS.pl"
 # Activate YGS Perl env
@@ -284,10 +291,11 @@ for reads_type in os ss; do
   check_output "$base.trace.gz"
   echo "Log file: $base.trace_result"
   grep -v '^$' "$base.trace_result" | sed 's/^/  /'
+  echo
 done
 
 # Produce genomic repeat k-mers (copy number > 1) bit-array
-echo "...genomic repeats"
+echo "Preparing genomic repeat $k-mers with copy number > 1..."
 if [[ ! -s "$g_win_base.gen_rep.gz" ]]; then # skip if output exists
   set -x
   perl "$ygs_pl" kmer_size="$k" mode=contig contig="$g_win_base.fasta.gz" \
@@ -308,6 +316,8 @@ if [[ ! -s "$out_final" ]]; then # skip if output exists
     trace="$os_base.trace.gz" gen_rep="$g_win_base.gen_rep.gz" \
     male_trace="$ss_base.trace.gz" || exit 1
   { set +x; } 2>/dev/null
+else
+  echo "Previous run results found. Skipping step."
 fi
 check_output "$out_final"
 grep -v '^$' "$out_final" | grep -vP '^>|^GI' | sed 's/^/  /'

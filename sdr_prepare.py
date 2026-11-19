@@ -3,6 +3,10 @@
 
 Run from the analysis directory containing assemblies/ and read_lists/.
 Called by sdr_id.sbatch before any jobs are submitted.
+
+Appends Model to read_pairs.tsv from <run>_runinfo.csv or runinfo.csv
+beside the FASTQs or one directory above them. Rows are matched by Run.
+Missing metadata and local reads receive Model=Unknown.
 """
 
 import argparse
@@ -11,6 +15,7 @@ import hashlib
 import json
 import re
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -26,6 +31,40 @@ def read_key(profile, paths):
         stat = path.stat()
         inputs.append([str(path), stat.st_size, stat.st_mtime_ns])
     return hashlib.sha256(json.dumps([profile, inputs]).encode()).hexdigest()
+
+
+@lru_cache(maxsize=None)
+def run_model(read_path):
+    """Look up an SRA run in adjacent run-info CSVs; local reads are unknown."""
+    path = Path(read_path)
+    match = re.match(r'^([SED]RR\d+)(?:_|\.)', path.name)
+    if not match:
+        return 'Unknown'
+    run = match[1]
+    models = set()
+    # Support flat read directories and per-run subdirectories.
+    candidates = dict.fromkeys(
+        directory / filename
+        for directory in (path.parent, path.parent.parent)
+        for filename in (f'{run}_runinfo.csv', 'runinfo.csv'))
+    for source in candidates:
+        if not source.is_file():
+            continue
+        with source.open(newline='', encoding='utf-8-sig') as fh:
+            for row in csv.DictReader(fh):
+                if (row.get('Run') or '').strip() != run:
+                    continue
+                model = (row.get('Model') or '').strip()
+                if model:
+                    if any(c in model for c in '\t\n\r'):
+                        fail(f'invalid Model for {run} in {source}')
+                    models.add(model)
+    if len(models) > 1:
+        fail(f'conflicting sequencing models for {run}: {sorted(models)}')
+    if not models:
+        print(f'Warning: no sequencing Model found for {run} near {path.parent}; '
+              'using Unknown.', file=sys.stderr)
+    return next(iter(models), 'Unknown')
 
 
 def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv"):
@@ -64,6 +103,7 @@ def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv
         genome = Path('assemblies', label + '.fa').resolve()
         if not genome.is_file() or not genome.stat().st_size: fail(f'missing assembly: {genome}')
         samples, pairs, lists, seen_paths = {}, [], {}, set()
+        sample_bytes = {}
         for read_sex in ('female', 'male'):
             source = Path('read_lists', f'{label}_{read_sex}.list')
             if not source.is_file(): fail(f'missing read list: {source}')
@@ -94,6 +134,9 @@ def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv
                 if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]*', sample): fail(f'unsafe sample ID: {sample}')
                 if sample in samples and samples[sample] != read_sex: fail(f'sample in both sexes: {sample}')
                 samples[sample] = read_sex
+                # Include both mates from every lane/library for this sample
+                sample_bytes[sample] = sample_bytes.get(sample, 0) + sum(
+                    Path(path).stat().st_size for path in mate_paths.values())
                 # Local filename prefix: Sample_Library_RunID_Barcode_Plate_Lane
                 fields = key[1].split('_')
                 # For remote download, uses SRA ID
@@ -101,13 +144,13 @@ def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv
                 pair_id = f'pair{len(pairs)+1:04d}'
 
                 pairs.append([sample, read_sex, library, pair_id,
-                              mate_paths[1], mate_paths[2]])
+                              mate_paths[1], mate_paths[2], run_model(mate_paths[1])])
         depth = out / depth_outdir / label
         depth.mkdir(parents=True, exist_ok=True)
         for filename, header_fields, data in [
             ('samples.tsv', ['Sample', 'Sex'], list(samples.items())),
             ('read_pairs.tsv', 
-             ['Sample', 'Sex', 'Library', 'Pair_ID', 'R1', 'R2'],
+             ['Sample', 'Sex', 'Library', 'Pair_ID', 'R1', 'R2', 'Model'],
              pairs),
             ('assembly_metadata.tsv', header, [[row[col] for col in header]])]:
             with (depth / filename).open('w') as fh:
@@ -119,7 +162,7 @@ def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv
             same = 'female' if target == 'U' else 'male'
             opposite = 'male' if target == 'U' else 'female'
             for filename, read_sex in [('ss.txt', same), ('os.txt', opposite)]:
-                # Do not silently reuse cached k-mers for changed lists.
+                # Do not silently reuse cached k-mers for changed lists
                 dest = ygs / filename
                 content = '\n'.join(lists[read_sex]) + '\n'
                 if dest.exists() and dest.read_text() != content and any(ygs.glob('*.jf')):
@@ -130,8 +173,10 @@ def prepare(metadata, out, ygs_outdir, depth_outdir, plan_filename="sdr_plan.tsv
         depth_set = read_key('depth', sorted(lists['female'] + lists['male']))
         female_set = read_key('ygs', sorted(lists['female']))
         male_set = read_key('ygs', sorted(lists['male']))
+        # Largest depth array task, in on-disk GiB rounded up for Bash arithmetic
+        max_sample_gib = (max(sample_bytes.values()) + 2**30 - 1) // 2**30
         plan.append([label, str(genome), sex, str(len(samples)),
-                     depth_set, female_set, male_set])
+                     depth_set, female_set, male_set, str(max_sample_gib)])
         print(f'{label}: Sample_ID={row["Sample_ID"]}; Region={row["Region"]}; Sex={sex}; '
               f'Ploidy={row["Ploidy"]}; {len(samples)} samples, {len(pairs)} read pairs')
     with (out / plan_filename).open('w') as fh:
