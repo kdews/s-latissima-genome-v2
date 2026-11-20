@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J depth_sdr
 #SBATCH -o %x_logs/%x_%a_%j.log
-#SBATCH -p oneweek
+#SBATCH -p gpu
 #SBATCH --time=1-0
 #SBATCH --mem=65g
 #SBATCH --cpus-per-task=8
@@ -160,6 +160,20 @@ IFS=$'\t' read -r indiv_id sex <<< "$record"
 echo "Assembly=$genome_base; sample=$indiv_id; sex=$sex; task=$task"
 echo
 
+# Skip completed analysis except prep jobs
+mosdepth_prefix="$depth_out/mosdepth/$indiv_id"
+if [[ "$prepare_only" != true ]]; then
+  depth_complete=true
+  for suffix in mosdepth.global.dist.txt mosdepth.region.dist.txt \
+    mosdepth.summary.txt regions.bed.gz regions.bed.gz.csi; do
+    [[ -s "$mosdepth_prefix.$suffix" ]] || depth_complete=false
+  done
+  if [[ "$depth_complete" == true ]]; then
+    echo "Mosdepth outputs already exist for $indiv_id; skipping analysis."
+    exit 0
+  fi
+fi
+
 # Reserve most memory for mapping
 mem_mb="${SLURM_MEM_PER_NODE:-65000}" # default: 65,000 Mb
 sort_threads="$((nthrd > 1 ? nthrd / 2 : 1))" # threads for samtools sort
@@ -188,7 +202,7 @@ while IFS=$'\t' read -r sample read_sex library pair_id R1 R2 model; do
     echo 'Error: Invalid read manifest row.' >&2
     exit 1
   fi
-  # Use sequencing model when available; otherwise retain fastp auto-detection.
+  # Use sequencing model when available; otherwise retain fastp auto-detection
   case "${model,,}" in
     *nextseq*|*novaseq*) poly_g_args=(--trim_poly_g --poly_g_min_len 8) ;;
     *hiseq*|*miseq*) poly_g_args=(--disable_trim_poly_g) ;;
@@ -223,12 +237,17 @@ while IFS=$'\t' read -r sample read_sex library pair_id R1 R2 model; do
       rm -f "$trim_dir/complete" || exit 1
       mv "$trim_work/"* "$trim_dir/" || exit 1
       touch "$trim_dir/complete" || exit 1
+    else
+      echo "Using prepared trimmed reads."
+      echo "R1: $trim_R1"
+      echo "R2: $trim_R2"
     fi
   ) 9>"$trim_dir/.lock" || exit 1
   for report in html json; do
     ln -sfn "$trim_dir/fastp.$report" \
       "$depth_out/fastp/${indiv_id}.${pair_id}.$report" || exit 1
   done
+  echo
   [[ "$prepare_only" != true ]] || continue
   
   # Align and sort reads
@@ -292,7 +311,7 @@ conda activate mosdepth
 mkdir -p "$depth_out/mosdepth"
 set -x
 mosdepth --threads "$nthrd" --by 10000 --fast-mode --mapq 30 --no-per-base \
-  "$depth_out/mosdepth/$indiv_id" "$depth_out/bams/$indiv_bam" \
+  "$mosdepth_prefix" "$depth_out/bams/$indiv_bam" \
   || exit 1
 { set +x; } 2>/dev/null
 conda deactivate

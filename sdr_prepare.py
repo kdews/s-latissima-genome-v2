@@ -35,11 +35,11 @@ def read_key(profile, paths):
 
 @lru_cache(maxsize=None)
 def run_model(read_path):
-    """Look up an SRA run in adjacent run-info CSVs; local reads are unknown."""
+    """Look up an SRA run in adjacent run-info CSVs; local reads are NovaSeq."""
     path = Path(read_path)
     match = re.match(r'^([SED]RR\d+)(?:_|\.)', path.name)
     if not match:
-        return 'Unknown'
+        return 'NovaSeq 6000'
     run = match[1]
     models = set()
     # Support flat read directories and per-run subdirectories.

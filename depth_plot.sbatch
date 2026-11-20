@@ -46,7 +46,7 @@ Requires:
 if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
   show_help
   exit 0
-elif [[ "$#" -ne 1 ]]; then
+elif [[ "$#" -lt 1 ]]; then
   echo "Error: 1 positional argument required."
   echo
   show_help
@@ -70,7 +70,7 @@ date +"$date_fmt"
 echo
 
 # Input
-ygs_out="$1" # YGS output directory
+depth_out="$1" # depth output directory
 out_dir="${2:-$scripts_dir}" # output directory for plot images (optional)
 
 # Analyze outputs

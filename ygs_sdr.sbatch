@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J ygs_sdr
 #SBATCH -o %x_logs/%x_%j.log
-#SBATCH -p htcondor
+#SBATCH -p oneweek
 #SBATCH --time=2-0
 #SBATCH --mem=59g
 #SBATCH --cpus-per-task=16

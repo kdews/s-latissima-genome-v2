@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -J sdr_id
 #SBATCH -o %x_logs/%x_%j.log
-#SBATCH -p htcondor
-#SBATCH --time=1-0
+#SBATCH -p oneweek
+#SBATCH --time=7-0
 #SBATCH --mem=40g
 #SBATCH --cpus-per-task=16
 
@@ -177,6 +177,7 @@ in_tsv=""
 for arg in "$@"; do
   if [[ "$arg" == --dry-run ]]; then
     dry_run=true
+    echo 'Dry run mode: DEPTH_PREP_*/DEPTH_*/YGS_PREP_*/YGS_* = job ID placeholders'
   elif [[ -z "$in_tsv" ]]; then
     in_tsv="$arg"
   else
@@ -226,17 +227,105 @@ else
 fi
 echo
 
-# Submit preparation once per read set; analysis jobs retain runtime fallback.
+# Arrays ensure preparation is performed once per read set
 declare -A depth_prep_ids ygs_prep_ids
 
-# Print the same arguments as sbatch, quoting paths safely for review.
+# Print the same arguments as sbatch, quoting paths safely for review
 print_sbatch () {
   printf '%q ' sbatch "$@"
   printf '\n'
 }
-if [[ "$dry_run" == true ]]; then
-  echo 'Dry run mode: DEPTH_PREP_*/DEPTH_*/YGS_PREP_*/YGS_* = job ID placeholders'
-fi
+
+# Prints (to sdterr) and submits Slurm batch job, checks allocation limits first
+submit_job () {
+  local partition="" array="" limit tasks queued n_jobs
+  local output err_file status i
+  local -a args=("$@")
+
+  # Read submission options without modifying the original arguments.
+  for ((i = 0; i < ${#args[@]}; i++)); do
+    case "${args[i]}" in
+      -p|--partition) partition="${args[i+1]}" ;;
+      --partition=*) partition="${args[i]#*=}" ;;
+      -a|--array)     array="${args[i+1]}" ;;
+      --array=*)     array="${args[i]#*=}" ;;
+    esac
+  done
+
+  # Submission limit for each partition QOS
+  case "$partition" in
+    main) limit=5000 ;;
+    oneweek) limit=50 ;;
+    htcondor) limit=1000 ;;
+    gpu) limit=100 ;;
+    largemem) limit=10 ;;
+    *)
+      echo "submit_job: no submission limit configured for '$partition'." >&2
+      return 1
+      ;;
+  esac
+
+  # Count tasks, including lists, ranges, steps, and concurrency throttles
+  tasks=$(awk -v spec="${array:-0}" 'BEGIN {
+    sub(/%.*/, "", spec)
+    n = split(spec, parts, ",")
+    for (i = 1; i <= n; i++) {
+      split(parts[i], range_step, ":")
+      step = range_step[2] ? range_step[2] : 1
+      if (split(range_step[1], bounds, "-") == 2)
+        total += int((bounds[2] - bounds[1]) / step) + 1
+      else
+        total++
+    }
+    print total
+  }')
+
+  if (( tasks > limit )); then
+    echo "submit_job: $tasks tasks exceed the $partition limit of $limit." >&2
+    return 1
+  fi
+
+  err_file=$(mktemp) || return 1
+
+  while true; do
+    # -r expands arrays so each task is counted separately
+    if ! queued=$(squeue -h -r --me -p "$partition" -o '%i'); then
+      rm -f "$err_file"
+      return 1
+    fi
+    n_jobs=$(printf '%s\n' "$queued" | awk 'NF {n++} END {print n+0}')
+
+    if (( n_jobs + tasks > limit )); then
+      printf '%s: %s/%s jobs; waiting 30 min to submit %s tasks...\n' \
+        "$partition" "$n_jobs" "$limit" "$tasks" >&2
+      sleep 1800
+      continue
+    fi
+
+    printf '%q ' sbatch "$@" >&2
+    printf '\n' >&2
+
+    if output=$(sbatch "$@" 2>"$err_file"); then
+      cat "$err_file" >&2
+      rm -f "$err_file"
+      printf '%s\n' "$output"
+      return 0
+    else
+      status=$?
+    fi
+
+    cat "$err_file" >&2
+
+    # Retry only submission-limit errors
+    if ! grep -qF 'QOSMaxSubmitJobPerUserLimit' "$err_file"; then
+      rm -f "$err_file"
+      return "$status"
+    fi
+
+    echo "Submission limit reached; retrying in 30 minutes..." >&2
+    sleep 1800
+  done
+}
 
 # Iterate through $plan_tsv
 while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set max_sample_gib; do
@@ -244,42 +333,43 @@ while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set
   depth_out="$main_outdir/$depth_outdir/$label"
   if [[ -z "${depth_prep_ids[$depth_set]:-}" ]]; then
     if [[ "$dry_run" == true ]]; then
-      print_sbatch --parsable --array="1-$n_samples"%4 \
-        -o "%x_logs/%x_prep_${label}_%j_%a.log" "$scripts_dir/$depth_job" \
+      print_sbatch --parsable -p gpu --array="1-$n_samples"%10 \
+        -o "%x_logs/%x_prep_${label}_%a_%j.log" "$scripts_dir/$depth_job" \
         "$genome" "$scripts_dir" --prepare-only
       depth_prep_ids[$depth_set]="DEPTH_PREP_$label"
     else
-      depth_prep_ids[$depth_set]="$(sbatch --parsable --array="1-$n_samples"%4 \
-        -o "%x_logs/%x_prep_${label}_%j_%a.log" "$scripts_dir/$depth_job" \
-        "$genome" "$scripts_dir" --prepare-only)" || exit 1
+      depth_prep_ids[$depth_set]="$(submit_job --parsable -p gpu \
+        --array="1-$n_samples"%10 -o "%x_logs/%x_prep_${label}_%a_%j.log" \
+        "$scripts_dir/$depth_job" "$genome" "$scripts_dir" --prepare-only)" \
+        || exit 1
+      echo "Submitted batch job ${depth_prep_ids[$depth_set]}"
     fi
   fi
   d_cmd=(
     --parsable
-    --array="1-$n_samples"%4
+    --array="1-$n_samples"%10
     --dependency="afterok:${depth_prep_ids[$depth_set]}"
-    -o "%x_logs/%x_${label}_%j_%a.log"
+    -o "%x_logs/%x_${label}_%a_%j.log"
     "$scripts_dir/$depth_job"
     "$genome"
     "$scripts_dir"
   )
   if (( max_sample_gib > 16 )); then
-    d_cmd=(
-      -p largemem
-      --mem=900g
-      --time=4-0
-      "${d_cmd[@]}"
-    )
+    d_cmd=(-p largemem --mem=900g --time=4-0 "${d_cmd[@]}")
+  else
+    d_cmd=(-p gpu "${d_cmd[@]}")
   fi
   if [[ "$dry_run" == true ]]; then
     print_sbatch "${d_cmd[@]}"
-    print_sbatch --dependency="afterok:DEPTH_$label" \
+    print_sbatch -p main -o "%x_logs/%x_${label}_%j.log" \
+      --dependency="afterok:DEPTH_$label" \
       "$scripts_dir/$depth_plot" "$depth_out" "$scripts_dir"
   else
     index_missing=false
     for suffix in bwt.2bit.64 0123 amb ann pac; do
       [[ -s "$depth_out/$label.$suffix" ]] || index_missing=true
     done
+    # Create bwa-mem2 index of genome
     if [[ "$index_missing" == true ]]; then
       conda activate bwa-mem2
       set -x
@@ -287,30 +377,29 @@ while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set
       { set +x; } 2>/dev/null
       conda deactivate
     fi
-    conda activate samtools
-    set -x
-    samtools faidx "$genome" || exit 1
-    { set +x; } 2>/dev/null
-    conda deactivate
-    # Load GATK4
-    module load gcc/13.3.0 gatk/4.5.0.0 python/3.13.2 openjdk/21.0.0_35
-    gatk --version || exit 1
+    # Create samtools index of genome FASTA
+    if [[ ! -s "$genome.fai" ]]; then
+      conda activate samtools
+      set -x
+      samtools faidx "$genome" || exit 1
+      { set +x; } 2>/dev/null
+      conda deactivate
+    fi
     # Build GATK4 sequence dictionary from genome FASTA
     if [[ ! -s "${genome%.fa}.dict" ]]; then
+      module load gcc/13.3.0 gatk/4.5.0.0 python/3.13.2 openjdk/21.0.0_35
+      gatk --version || exit 1
       set -x
       gatk CreateSequenceDictionary -R "$genome" -O "${genome%.fa}.dict" \
         || exit 1
       { set +x; } 2>/dev/null
+      module purge
     fi
-    module purge
-    set -x
-    d_id="$(sbatch "${d_cmd[@]}")" \
-      || exit 1
-    { set +x; } 2>/dev/null
-    set -x
-    sbatch --dependency="afterok:$d_id" "$scripts_dir/$depth_plot" "$depth_out" \
-      "$scripts_dir"
-    { set +x; } 2>/dev/null
+    d_id="$(submit_job "${d_cmd[@]}")" || exit 1
+    echo "Submitted batch job $d_id"
+    submit_job -p main -o "%x_logs/%x_${label}_%j.log" \
+      --dependency="afterok:$d_id" "$scripts_dir/$depth_plot" \
+      "$depth_out" "$scripts_dir" || exit 1
   fi
   targets=("$sex")
   [[ "$sex" != UV ]] || targets=(U V)
@@ -320,36 +409,36 @@ while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set
     [[ "$target" != V ]] || ygs_set="${female_set}_${male_set}"
     if [[ -z "${ygs_prep_ids[$ygs_set]:-}" ]]; then
       if [[ "$dry_run" == true ]]; then
-        print_sbatch --parsable -o "%x_logs/%x_prep_${label}_${target}_%j.log" \
+        print_sbatch --parsable -p oneweek \
+          -o "%x_logs/%x_prep_${label}_${target}_%j.log" \
           "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir" \
           --prepare-only
         ygs_prep_ids[$ygs_set]="YGS_PREP_${label}_$target"
       else
-        set -x
-        ygs_prep_ids[$ygs_set]="$(sbatch --parsable \
+        ygs_prep_ids[$ygs_set]="$(submit_job --parsable -p oneweek \
           -o "%x_logs/%x_prep_${label}_${target}_%j.log" \
           "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir" \
           --prepare-only)" || exit 1
-        { set +x; } 2>/dev/null
+        echo "Submitted batch job ${ygs_prep_ids[$ygs_set]}"
       fi
     fi
     if [[ "$dry_run" == true ]]; then
-      print_sbatch --parsable -o "%x_logs/%x_${label}_%j.log" \
+      print_sbatch --parsable -p oneweek -o "%x_logs/%x_${label}_%j.log" \
         --dependency="afterok:${ygs_prep_ids[$ygs_set]}" \
         "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir"
-      print_sbatch --dependency="afterok:YGS_${label}_$target" \
+      print_sbatch -p main -o "%x_logs/%x_${label}_${target}_%j.log" \
+        --dependency="afterok:YGS_${label}_$target" \
         "$scripts_dir/$ygs_plot" "$ygs_out" "$scripts_dir"
     else
-      set -x
-      y_id="$(sbatch --parsable -o "%x_logs/%x_${label}_${target}_%j.log" \
+      y_id="$(submit_job --parsable -p oneweek \
+        -o "%x_logs/%x_${label}_${target}_%j.log" \
         --dependency="afterok:${ygs_prep_ids[$ygs_set]}" \
         "$scripts_dir/$ygs_job" "$genome" "$target" "$scripts_dir")" \
         || exit 1
-      { set +x; } 2>/dev/null
-      set -x
-      sbatch --dependency="afterok:$y_id" "$scripts_dir/$ygs_plot" "$ygs_out" \
-        "$scripts_dir"
-      { set +x; } 2>/dev/null
+      echo "Submitted batch job $y_id"
+      submit_job -p main -o "%x_logs/%x_${label}_${target}_%j.log" \
+        --dependency="afterok:$y_id" "$scripts_dir/$ygs_plot" \
+        "$ygs_out" "$scripts_dir" || exit 1
     fi
   done
   echo
