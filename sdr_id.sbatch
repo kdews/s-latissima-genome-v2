@@ -354,8 +354,9 @@ while IFS=$'\t' read -r label genome sex n_samples depth_set female_set male_set
     "$genome"
     "$scripts_dir"
   )
-  if (( max_sample_gib > 16 )); then
-    d_cmd=(-p largemem --mem=900g --time=4-0 "${d_cmd[@]}")
+  if (( max_sample_gib > 15 )); then
+    # d_cmd=(-p largemem --mem=900g --time=4-0 "${d_cmd[@]}")
+    d_cmd=(-p onweek --mem=160g --time=4-0 "${d_cmd[@]}")
   else
     d_cmd=(-p gpu "${d_cmd[@]}")
   fi

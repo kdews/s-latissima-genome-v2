@@ -160,20 +160,6 @@ IFS=$'\t' read -r indiv_id sex <<< "$record"
 echo "Assembly=$genome_base; sample=$indiv_id; sex=$sex; task=$task"
 echo
 
-# Skip completed analysis except prep jobs
-mosdepth_prefix="$depth_out/mosdepth/$indiv_id"
-if [[ "$prepare_only" != true ]]; then
-  depth_complete=true
-  for suffix in mosdepth.global.dist.txt mosdepth.region.dist.txt \
-    mosdepth.summary.txt regions.bed.gz regions.bed.gz.csi; do
-    [[ -s "$mosdepth_prefix.$suffix" ]] || depth_complete=false
-  done
-  if [[ "$depth_complete" == true ]]; then
-    echo "Mosdepth outputs already exist for $indiv_id; skipping analysis."
-    exit 0
-  fi
-fi
-
 # Reserve most memory for mapping
 mem_mb="${SLURM_MEM_PER_NODE:-65000}" # default: 65,000 Mb
 sort_threads="$((nthrd > 1 ? nthrd / 2 : 1))" # threads for samtools sort
@@ -194,7 +180,6 @@ conda deactivate
 echo
 
 # Parse read_pairs.tsv to align samples to genome assembly
-work_dir="$(mktemp -d)"
 bam_args=()
 while IFS=$'\t' read -r sample read_sex library pair_id R1 R2 model; do
   [[ "$sample" == "$indiv_id" ]] || continue # select line(s) by ID match
@@ -209,6 +194,7 @@ while IFS=$'\t' read -r sample read_sex library pair_id R1 R2 model; do
     *) poly_g_args=() ;;
   esac
   echo "Pair=$pair_id; Model=${model:-Unknown}; poly-G=${poly_g_args[*]:-auto}"
+  echo
   # Share trimming across assemblies; standalone jobs use the same preparation.
   trim_policy="fastp:detect_adapter_for_pe:poly_g=${poly_g_args[*]:-auto}"
   trim_id="$(python3 "$scripts_dir/sdr_prepare.py" --read-key \
@@ -217,9 +203,19 @@ while IFS=$'\t' read -r sample read_sex library pair_id R1 R2 model; do
   mkdir -p "$trim_dir" || exit 1
   trim_R1="$trim_dir/R1.fastq.gz"
   trim_R2="$trim_dir/R2.fastq.gz"
+  R1_mem="$(du -mL "$R1" | cut -f1)"
+  R2_mem="$(du -mL "$R2" | cut -f1)"
+  read_mem=$(( R1_mem + R2_mem ))
+  # Create general workdir to /scratch2 if reads are large
+  if (( read_mem < 15000 )); then
+    work_dir="$(mktemp -d)" # working directory in /tmp
+  else
+    work_dir="$(mktemp -d "$depth_out/.tmp.XXXXXX")" # working directory in /scratch2
+  fi
   (
     flock -x 9 || exit 1
     if [[ ! -f "$trim_dir/complete" || ! -s "$trim_R1" || ! -s "$trim_R2" ]]; then
+      # Working directory in /scratch2
       trim_work="$(mktemp -d "$trim_dir/.tmp.XXXXXX")" || exit 1
       trap 'rm -rf -- "$trim_work"' EXIT
       conda activate fastp || exit 1
@@ -241,6 +237,7 @@ while IFS=$'\t' read -r sample read_sex library pair_id R1 R2 model; do
       echo "Using prepared trimmed reads."
       echo "R1: $trim_R1"
       echo "R2: $trim_R2"
+      echo "Skipping trimming step..."
     fi
   ) 9>"$trim_dir/.lock" || exit 1
   for report in html json; do
@@ -251,21 +248,27 @@ while IFS=$'\t' read -r sample read_sex library pair_id R1 R2 model; do
   [[ "$prepare_only" != true ]] || continue
   
   # Align and sort reads
-  conda activate bwa-mem2
-  # Generic read groups support both SRA accessions and local Illumina filenames
-  rg_lb="${indiv_id}_${library}" # same libraries retain common LB across lanes
-  rg_id="${indiv_id}.${pair_id}" # each FASTQ pair has a unique read group ID
   sample_bam="$depth_out/bams/$pair_id.query.bam"
-  set -x
-  bwa-mem2 mem -t "$nthrd" \
-    -R "@RG\tID:$rg_id\tSM:$indiv_id\tLB:$rg_lb\tPL:ILLUMINA\tPU:$rg_id" \
-    "$depth_out/$genome_base" "$trim_R1" "$trim_R2" \
-    | samtools sort -n -@ "$sort_threads" -m "${mem_per_thread}M"\
-      -T "$work_dir/$pair_id.sort" -O bam -o "$sample_bam" || exit 1
-  { set +x; } 2>/dev/null
-  rm -rf -- "${work_dir:?}/"* # clean temp working directory
+  if [[ ! -s "$sample_bam" ]]; then # skip if sample BAM exists
+    # Generic read groups support both SRA accessions and local Illumina filenames
+    rg_lb="${indiv_id}_${library}" # same libraries retain common LB across lanes
+    rg_id="${indiv_id}.${pair_id}" # each FASTQ pair has a unique read group ID
+    # Activate BWA-MEM2 env
+    conda activate bwa-mem2
+    set -x
+    bwa-mem2 mem -t "$nthrd" \
+      -R "@RG\tID:$rg_id\tSM:$indiv_id\tLB:$rg_lb\tPL:ILLUMINA\tPU:$rg_id" \
+      "$depth_out/$genome_base" "$trim_R1" "$trim_R2" \
+      | samtools sort -n -@ "$sort_threads" -m "${mem_per_thread}M"\
+        -T "$work_dir/$pair_id.sort" -O bam -o "$sample_bam" || exit 1
+    { set +x; } 2>/dev/null
+    rm -rf -- "${work_dir:?}/"* # clean temp working directory
+    conda deactivate
+  else
+    echo "Sorted BAM already exists for $pair_id: $sample_bam"
+    echo "Skipping alignment and sort step..."
+  fi
   bam_args+=(-I "$sample_bam")
-  conda deactivate
 done < <(tail -n +2 "$depth_out/read_pairs.tsv")
 if [[ "$prepare_only" == true ]]; then
   rm -rf -- "$work_dir"
@@ -273,48 +276,75 @@ if [[ "$prepare_only" == true ]]; then
 fi
 (( ${#bam_args[@]} > 0 )) || { echo "No pairs for $indiv_id" >&2; exit 1; }
 rm -rf -- "$work_dir"
+echo
 
+# Run GATK4's MarkDuplicates and combine sample BAMs
 # GATK4 Spark parameters
-# Leave half the allocation for /tmp, overhead, and other processes
-heap_mb="$(( mem_mb / 2 ))"
-# Budget memory for large jobs
-if [[ "$SLURM_JOB_PARTITION" == largemem ]]; then
-  heap_cap_mb="$(( 350 * 1024 ))"
-  (( heap_mb > heap_cap_mb )) && heap_mb="$heap_cap_mb"
-fi
-
-# Load GATK4
+# heap_mb="$(( mem_mb / 2 ))"
+# # Budget memory for large jobs
+# if [[ "$SLURM_JOB_PARTITION" == largemem ]]; then
+#   heap_cap_mb="$(( 350 * 1024 ))"
+#   (( heap_mb > heap_cap_mb )) && heap_mb="$heap_cap_mb"
+# fi
+heap_mb=32000 # cap at 32Gb (unit=M)
+# Load GATK4 env
 module purge
 module load gcc/13.3.0 gatk/4.5.0.0 python/3.13.2 openjdk/21.0.0_35
 gatk --version || exit 1
-
-# Run GATK4's MarkDuplicates
-work_dir="$(mktemp -d)"
-indiv_bam="${indiv_id}.sorted.bam" # one BAM for biological individual
-set -x
-gatk --java-options "-Xmx${heap_mb}M" \
-  MarkDuplicatesSpark -R "$genome" --tmp-dir "$work_dir" "${bam_args[@]}" \
-  -O "$depth_out/bams/$indiv_bam" \
-  -VS LENIENT \
-  --spark-master "local[$nthrd]" \
-  --conf spark.local.dir="$work_dir" \
-  --conf spark.task.cpus=1 \
-  || exit 1
-{ set +x; } 2>/dev/null
-module purge
-check_output "$depth_out/bams/$indiv_bam"
-check_output "$depth_out/bams/$indiv_bam.bai"
-rm -rf -- "$work_dir"
+indiv_bam="$depth_out/bams/${indiv_id}.sorted.bam" # one BAM for biological individual
+if [[ ! -s "$indiv_bam" ]]; then # skip if individual BAM exists
+  # Create general workdir in /scratch2 if BAMs are large
+  bam_mem=0
+  for ((i = 1; i < ${#bam_args[@]}; i += 2)); do
+    bam_mem_i="$(du -mL "${bam_args[i]}" | cut -f1)"
+    bam_mem=$(( bam_mem + bam_mem_i ))
+  done
+  if (( bam_mem < 15000 )); then
+    work_dir="$(mktemp -d)" # working directory in /tmp
+  else
+    work_dir="$(mktemp -d "$depth_out/.tmp.XXXXXX")" # working directory in /scratch2
+  fi
+  set -x
+  gatk --java-options "-Xmx${heap_mb}M" \
+    MarkDuplicatesSpark -R "$genome" --tmp-dir "$work_dir" "${bam_args[@]}" \
+    -O "$indiv_bam" \
+    -VS LENIENT \
+    --spark-master "local[$nthrd]" \
+    --conf spark.local.dir="$work_dir" \
+    --conf spark.task.cpus=1 \
+    || exit 1
+  { set +x; } 2>/dev/null
+  module purge
+  check_output "$indiv_bam"
+  check_output "$indiv_bam.bai"
+  rm -rf -- "$work_dir"
+else
+  echo "Individual BAM already exists for $indiv_id: $indiv_bam"
+  echo "Skipping MarkDuplicatesSpark step..."
+fi
+echo
 
 # Calculate read depth across genome in 10-kb windows
-conda activate mosdepth
-mkdir -p "$depth_out/mosdepth"
-set -x
-mosdepth --threads "$nthrd" --by 10000 --fast-mode --mapq 30 --no-per-base \
-  "$mosdepth_prefix" "$depth_out/bams/$indiv_bam" \
-  || exit 1
-{ set +x; } 2>/dev/null
-conda deactivate
+mosdepth_prefix="$depth_out/mosdepth/$indiv_id"
+depth_complete=true
+for suffix in mosdepth.global.dist.txt mosdepth.region.dist.txt \
+  mosdepth.summary.txt regions.bed.gz regions.bed.gz.csi; do
+  [[ -s "$mosdepth_prefix.$suffix" ]] || depth_complete=false
+done
+if [[ "$depth_complete" == true ]]; then # skip if final outputs exist
+  echo "Final output files found for $indiv_id:"
+  tree -A "$depth_out/mosdepth"
+  echo "Skipping mosdepth step..."
+else
+  conda activate mosdepth
+  mkdir -p "$depth_out/mosdepth"
+  set -x
+  mosdepth --threads "$nthrd" --by 10000 --fast-mode --mapq 30 --no-per-base \
+    "$mosdepth_prefix" "$indiv_bam" \
+    || exit 1
+  { set +x; } 2>/dev/null
+  conda deactivate
+fi
 
 # Print date and time
 echo

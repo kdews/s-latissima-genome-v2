@@ -14,7 +14,9 @@ if (interactive()) {
   wd <- "/scratch2/kdeweese/corteva_genome"
   setwd(wd)
   # Depth results directory
-  depth_out <- "sdr_id_results/depth_sdr_results/corteva_v2_ha"
+  # depth_out <- "sdr_id_results/depth_sdr_results/corteva_v2_ha"
+  # depth_out <- "sdr_id_results/depth_sdr_results/japonica_li2025"
+  depth_out <- "sdr_id_results/depth_sdr_results/skinny_kelp"
   # Output directory
   outdir <- "s-latissima-genome-v2"
 } else {
@@ -23,10 +25,19 @@ if (interactive()) {
   outdir <- line_args[2]
 }
 mos_dir <- file.path(depth_out, "mosdepth") # mosdepth results dir
+samples_file <- file.path(depth_out, "samples.tsv") # samples table
 # Locate regions BED files
 regions_bed_files <- list.files(mos_dir, pattern = ".regions.bed.gz$",
                                 full.names = T)
 
+# fai_files <- list.files("assemblies", pattern = "\\.fai$", full.names = T)
+# fai_files <- grep("CHR", fai_files, invert = T, value = T)
+# idx <- read_tsv(fai_files, col_names = c("ID", "Length", NULL, NULL, NULL),
+#                 id = "Label", col_select = c("ID", "Length")) %>%
+#   mutate(Label = gsub(".fa.fai$", "", basename(Label))) %>%
+#   group_by(Label) %>%
+#   rownames_to_column(var = "ID_num")
+# write_tsv(idx, "all_ids.tsv")
 
 ## Output
 genome_base <- basename(depth_out) # parse genome name from YGS results directory
@@ -47,50 +58,52 @@ if (dir.exists(outdir)) {
 
 
 ## Analysis
+sample_df <- read_tsv(samples_file)
 depth_df <- read_tsv(regions_bed_files, col_names = depth_cols,
                        id = "Sample") %>%
   mutate(Sample = gsub(".regions.bed.gz$", "", basename(Sample)),
-         Sex = case_when(grepl("-FG-", Sample) ~ "female",
-                         grepl("-MG-", Sample) ~ "male"),
-         Chr = gsub("Chr", "Chr ", Chr),
-         Chr = gsub("Chr 0", "Chr ", Chr),
-         n_Chr = as.integer(str_split_i(Chr, " ", 2)),
+         # Chr = gsub("Chr", "Chr ", Chr),
+         # Chr = gsub("Chr 0", "Chr ", Chr),
+         # n_Chr = as.integer(str_split_i(Chr, " ", 2)),
          Midpoint = (Start + End) / 2,
          Window_Length = End - Start) %>%
+  left_join(sample_df) %>%
   # Normalize per sample by genome-wide mean depth
   mutate(Sample_Genome_Mean = weighted.mean(Mean_Depth, w = Window_Length,
                                             na.rm = T),
          Normalized_Depth = Mean_Depth / Sample_Genome_Mean,
-         .by = Sample)
+         .by = Sample) %>%
+  filter(sum(Normalized_Depth) > 0, .by = c(Chr))
 # Normalize per sex by genome-wide mean depth
 sex_df <- depth_df %>%
   summarize(Mean_Normalized_Depth = mean(Normalized_Depth, na.rm = T),
             SE_Normalized_Depth = sd(Normalized_Depth, na.rm = T) /
               sqrt(sum(!is.na(Normalized_Depth))),
             n = n_distinct(Sample),
-            .by = c(Sex, n_Chr, Chr, Start, End, Midpoint))
+            .by = c(Sex, Chr, Start, End, Midpoint))
 # Calculate sex-based difference in depth per window
 bias_df <- sex_df %>%
   summarize(Male_Mean_Depth = mean(Mean_Normalized_Depth[Sex == "male"], na.rm = T),
     Female_Mean_Depth = mean(Mean_Normalized_Depth[Sex == "female"], na.rm = T),
     Sex_Biased_Difference = Female_Mean_Depth - Male_Mean_Depth,
     Log2_Sex_Ratio = log2((Female_Mean_Depth + 0.05) / (Male_Mean_Depth + 0.05)),
-    .by = c(n_Chr, Chr, Start, End, Midpoint)
+    .by = c(Chr, Start, End, Midpoint)
   )
 # Choose candidate sex chromosome(s)
 depth_cands <- bias_df %>%
   summarize(n = n(),
             total_bias = sum(Log2_Sex_Ratio),
             mean_bias = total_bias/n,
-            .by = n_Chr) %>%
+            .by = Chr) %>%
+  arrange(desc(mean_bias)) %>%
   filter(mean_bias == max(mean_bias))
 # Filter dataframes
 filt_sex_df <- sex_df %>%
-  filter(n_Chr %in% depth_cands$n_Chr)
+  filter(Chr %in% depth_cands$Chr)
 filt_bias_df <- bias_df %>%
-  filter(n_Chr %in% depth_cands$n_Chr)
+  filter(Chr %in% depth_cands$Chr)
 # Title for sex chromosome candidate plot
-if (length(depth_cands$n_Chr) == 1) {
+if (length(depth_cands$Chr) == 1) {
   cand_ttl <- "Candidate sex chromosome"
 } else {
   cand_ttl <- "Candidate sex chromosomes"
@@ -102,8 +115,7 @@ if (length(depth_cands$n_Chr) == 1) {
 p_depth_all <- ggplot(sex_df, aes(x = Midpoint, y = Mean_Normalized_Depth,
                                      color = Sex)) +
   geom_line(linewidth = 0.3) +
-  facet_wrap(vars(n_Chr), scale = "free_x",
-             labeller = labeller(n_Chr = \(x) paste("Chr", x))) +
+  facet_wrap(vars(Chr), scale = "free_x") +
   scale_x_continuous(name = "Position (Mb)", labels = ~ .x * 1e-6) +
   scale_y_continuous(name = "Normalized mean depth per 100-kb window",
                      limits = c(0, 5))
@@ -111,8 +123,7 @@ p_depth_all <- ggplot(sex_df, aes(x = Midpoint, y = Mean_Normalized_Depth,
 p_depth_diff_all <- ggplot(bias_df, aes(x = Midpoint,
                                           y = Sex_Biased_Difference)) +
   geom_line(linewidth = 0.3) +
-  facet_wrap(vars(n_Chr), scale = "free_x",
-             labeller = labeller(n_Chr = \(x) paste("Chr", x))) +
+  facet_wrap(vars(Chr), scale = "free_x") +
   scale_x_continuous(name = "Position (Mb)", labels = ~ .x * 1e-6) +
   scale_y_continuous(name = str_wrap(
     "Female vs. male raw difference in mean read depth per 100-kb window",
@@ -122,8 +133,7 @@ p_depth_diff_all <- ggplot(bias_df, aes(x = Midpoint,
 p_log2ratio_all <- ggplot(bias_df, aes(x = Midpoint, y = Log2_Sex_Ratio,
                           color = Log2_Sex_Ratio)) +
   geom_point(size = 0.3) +
-  facet_wrap(vars(n_Chr), scale = "free_x",
-             labeller = labeller(n_Chr = \(x) paste("Chr", x))) +
+  facet_wrap(vars(Chr), scale = "free_x") +
   scale_x_continuous(name = "Position (Mb)", labels = ~ .x * 1e-6) +
   scale_y_continuous(name = str_wrap(
     "Female vs. male log2 ratio of mean read depth per 100-kb window",
@@ -135,8 +145,7 @@ p_depth_cand <- ggplot(filt_sex_df, aes(x = Midpoint,
                                                y = Mean_Normalized_Depth,
                                                color = Sex)) +
   geom_line(linewidth = 0.3, show.legend = F) +
-  facet_grid(cols = vars(n_Chr), rows = vars(Sex), scale = "free_x",
-             labeller = labeller(n_Chr = \(x) paste("Chr", x))) +
+  facet_grid(cols = vars(Chr), rows = vars(Sex), scale = "free_x") +
   scale_x_continuous(name = "Position (Mb)", labels = ~ .x * 1e-6) +
   scale_y_continuous(name = "Normalized mean depth per 100-kb window",
                      limits = c(0, 5))
@@ -144,8 +153,7 @@ p_depth_cand <- ggplot(filt_sex_df, aes(x = Midpoint,
 p_log2ratio_cand <- ggplot(filt_bias_df, aes(x = Midpoint, y = Log2_Sex_Ratio,
                           color = Log2_Sex_Ratio)) +
   geom_point(size = 0.3) +
-  facet_wrap(vars(n_Chr), scale = "free_x",
-             labeller = labeller(n_Chr = \(x) paste("Chr", x))) +
+  facet_wrap(vars(Chr), scale = "free_x") +
   scale_x_continuous(name = "Position (Mb)", labels = ~ .x * 1e-6) +
   scale_y_continuous(name = str_wrap(
     "Female vs. male log2 ratio of mean read depth per 100-kb window",
